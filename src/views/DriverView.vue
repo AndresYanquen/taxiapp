@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import L from 'leaflet'
 import axios from 'axios'
 import { io, Socket } from 'socket.io-client'
@@ -7,6 +7,8 @@ import type { Map as LeafletMap, LatLng, Marker } from 'leaflet'
 import { useAuthStore } from '@/stores/auth.store'
 import { useRouter } from 'vue-router'
 import type { Trip, Driver } from '../types' // Assuming you have a Trip type
+import { Capacitor } from '@capacitor/core'
+import { Geolocation } from '@capacitor/geolocation'
 
 // --- API and Socket Configuration ---
 let socket: Socket
@@ -16,6 +18,10 @@ const mapContainer = ref<HTMLElement | null>(null)
 const map = ref<LeafletMap | null>(null)
 const driverMarker = ref<Marker | null>(null)
 const riderMarker = ref<Marker | null>(null)
+
+// --- State for Location & Errors (New) ---
+const statusMessage = ref('')
+const showLocationErrorModal = ref(false)
 
 const isAvailable = ref(false)
 const isLoadingAvailability = ref(false)
@@ -31,43 +37,118 @@ const createDivIcon = (content: string, className: string) =>
 const driverIcon = createDivIcon('🚗', 'custom-icon custom-icon-driver')
 const riderIcon = createDivIcon('🧍', 'custom-icon custom-icon-rider')
 
+let locationInterval: number | null = null
+
+// This is the watch effect from the previous answer, now updated
+watch(isAvailable, (isNowAvailable) => {
+  if (isNowAvailable) {
+    // The driver just went online. Start sending location updates.
+    locationInterval = window.setInterval(async () => {
+      try {
+        // Use the new reusable function here as well
+        const { latitude, longitude } = await getCurrentPosition()
+        console.log('location driver update', latitude, longitude)
+        const newLatLng = L.latLng(latitude, longitude)
+
+        driverMarker.value?.setLatLng(newLatLng)
+
+        if (socket && socket.connected) {
+          socket.emit('update-location', { lat: latitude, lng: longitude })
+        }
+      } catch (error) {
+        console.error('Error sending location update:', error)
+        // Optionally, you could stop the interval if location fails repeatedly
+      }
+    }, 10000) // Send update every 10 seconds
+  } else {
+    // The driver just went offline. Stop sending updates.
+    if (locationInterval) {
+      clearInterval(locationInterval)
+      locationInterval = null
+    }
+  }
+})
+
 // --- Lifecycle Hooks ---
-onMounted(() => {
+onMounted(async () => {
   // Authentication and Role Guard
   if (!authStore.isAuthenticated || authStore.userRole !== 'driver') {
-    authStore.logout() // Log out if not a valid driver
+    authStore.logout()
     router.push('/login')
     return
   }
 
-  initMap()
+  // **MODIFICATION**: Call the new location function instead of initMap directly
+  await locateUserAndInitMap()
   setupSocketListeners()
   fetchDriverState()
 })
 
 onUnmounted(() => {
   if (socket) socket.disconnect()
+  if (locationInterval) {
+    clearInterval(locationInterval)
+  }
 })
 
+const getCurrentPosition = async (): Promise<{ latitude: number; longitude: number }> => {
+  const platform = Capacitor.getPlatform()
+
+  if (platform !== 'web') {
+    // Use Capacitor Geolocation plugin for native platforms (iOS, Android)
+    const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true })
+    return position.coords
+  } else {
+    // Use the standard Web Geolocation API for browsers
+    const position = await new Promise<{ coords: GeolocationCoordinates }>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 10000, // Time in ms before the request times out
+      })
+    })
+    return position.coords
+  }
+}
 // --- Core Functions ---
-const initMap = () => {
-  // Initialize map centered on Medellin
-  const initialPosition = L.latLng(6.2442, -75.5812)
-  map.value = L.map(mapContainer.value).setView(initialPosition, 13)
+
+// **NEW FUNCTION**: Integrated from your request
+const locateUserAndInitMap = async () => {
+  try {
+    // Call our new, reusable function to get the coordinates
+    const coords = await getCurrentPosition()
+
+    // Once we have coordinates, initialize the map at that position
+    const userPosition = L.latLng(coords.latitude, coords.longitude)
+    statusMessage.value = ''
+    initMap(userPosition)
+  } catch (error) {
+    console.error('Error getting initial location:', error)
+    statusMessage.value = 'Could not access your location. Defaulting to Medellín.'
+    showLocationErrorModal.value = true
+
+    // Fallback to a default location if geolocation fails
+    initMap(L.latLng(6.2442, -75.5812))
+  }
+}
+
+// **MODIFICATION**: initMap now accepts the user's position as an argument
+const initMap = (initialPosition: LatLng) => {
+  if (!mapContainer.value) return
+
+  map.value = L.map(mapContainer.value).setView(initialPosition, 19)
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; CARTO',
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    maxZoom: 19,
   }).addTo(map.value)
 
-  // Add driver marker
+  // Add driver marker at the fetched initial position
   driverMarker.value = L.marker(initialPosition, { icon: driverIcon, draggable: true }).addTo(
     map.value,
   )
   driverMarker.value.bindPopup('Your Location')
-
-  // In a real app, you would send the driver's location to the backend periodically
-  // For now, we just simulate it.
 }
 
+// --- (The rest of your functions: setupSocketListeners, fetchDriverState, etc. remain unchanged) ---
 const setupSocketListeners = () => {
   socket = io(import.meta.env.VITE_BACKEND_URL, {
     auth: { token: authStore.authToken },
@@ -77,37 +158,30 @@ const setupSocketListeners = () => {
     console.log('Driver connected to WebSocket server!')
   })
 
-  // Listen for new ride requests from the server
   socket.on('new-trip-request', (newTrip: Trip) => {
     console.log('New trip request received:', newTrip)
-    // Add request to the list if the driver is available and not on a trip
     if (isAvailable.value && !activeTrip.value) {
       tripRequests.value.push(newTrip)
     }
   })
 
-  // Listen for when a trip is no longer available (e.g., another driver accepted it)
   socket.on('trip-unavailable', ({ tripId }) => {
     tripRequests.value = tripRequests.value.filter((trip) => trip._id !== tripId)
   })
 }
 
-// --- API Functions ---
 const fetchDriverState = async () => {
   try {
-    // Check for an active trip first
     const tripRes = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/drivers/active-trip`, {
       headers: { Authorization: `Bearer ${authStore.authToken}` },
     })
 
     if (tripRes.data.activeTrip) {
       activeTrip.value = tripRes.data.activeTrip
-      isAvailable.value = false // A driver on a trip cannot be available
+      isAvailable.value = false
       updateMapForActiveTrip()
     } else {
-      // If no active trip, check the driver's last known availability
-      // (This would typically be part of a /api/driver/me endpoint)
-      isAvailable.value = false // Default to offline
+      isAvailable.value = false
     }
   } catch (error) {
     console.error('Error fetching driver state:', error)
@@ -125,7 +199,7 @@ const toggleAvailability = async () => {
     )
     isAvailable.value = newAvailability
     if (!newAvailability) {
-      tripRequests.value = [] // Clear requests when going offline
+      tripRequests.value = []
     }
   } catch (error: any) {
     alert(error.response?.data?.error || 'Could not update availability.')
@@ -142,8 +216,8 @@ const acceptTrip = async (tripId: string) => {
       { headers: { Authorization: `Bearer ${authStore.authToken}` } },
     )
     activeTrip.value = res.data
-    isAvailable.value = false // Accepting a trip makes you unavailable
-    tripRequests.value = [] // Clear all other requests
+    isAvailable.value = false
+    tripRequests.value = []
     updateMapForActiveTrip()
   } catch (error) {
     alert('Could not accept trip. It may have been taken by another driver.')
@@ -163,7 +237,7 @@ const handleTripAction = async (action: 'start' | 'complete') => {
 
     if (action === 'complete') {
       activeTrip.value = null
-      isAvailable.value = true // Optionally go back online
+      isAvailable.value = true
       if (riderMarker.value) map.value?.removeLayer(riderMarker.value)
       map.value?.setView(driverMarker.value!.getLatLng(), 13)
     }
@@ -175,12 +249,14 @@ const handleTripAction = async (action: 'start' | 'complete') => {
 const updateMapForActiveTrip = () => {
   if (!activeTrip.value || !map.value || !driverMarker.value) return
 
+  // Create the Leaflet LatLng object from the GeoJSON coordinates array.
+  // The format is [longitude, latitude], so we access them by index.
   const riderLatLng = L.latLng(
-    activeTrip.value.pickupLocation.lat,
-    activeTrip.value.pickupLocation.lng,
+    activeTrip.value.pickupLocation.coordinates[1], // Latitude
+    activeTrip.value.pickupLocation.coordinates[0], // Longitude
   )
 
-  // Add or move rider marker
+  // The rest of the function logic remains the same.
   if (!riderMarker.value) {
     riderMarker.value = L.marker(riderLatLng, { icon: riderIcon }).addTo(map.value)
   } else {
@@ -188,7 +264,7 @@ const updateMapForActiveTrip = () => {
   }
   riderMarker.value.bindPopup('Pickup Location')
 
-  // Fit map to show both driver and rider
+  // Adjust map view to show both driver and rider
   map.value.fitBounds(L.latLngBounds([driverMarker.value.getLatLng(), riderLatLng]), {
     padding: [50, 50],
   })
@@ -197,20 +273,16 @@ const updateMapForActiveTrip = () => {
 
 <template>
   <div class="relative w-screen h-screen flex">
-    <!-- Map -->
     <div ref="mapContainer" class="h-full flex-grow"></div>
 
-    <!-- UI Panel -->
     <div
       class="absolute top-0 left-0 bottom-0 z-[1000] w-full max-w-sm bg-white shadow-lg p-4 flex flex-col overflow-y-auto"
     >
-      <!-- Header -->
       <div class="pb-4 border-b">
         <h1 class="text-2xl font-bold">Driver Dashboard</h1>
         <p class="text-gray-500">Welcome, Driver!</p>
       </div>
 
-      <!-- Availability Toggle -->
       <div class="py-4 border-b flex items-center justify-between">
         <span class="font-semibold text-lg">Go Online</span>
         <button
@@ -230,16 +302,19 @@ const updateMapForActiveTrip = () => {
         </button>
       </div>
 
-      <!-- Main Content Area -->
       <div class="flex-grow pt-4">
-        <!-- Active Trip View -->
         <div v-if="activeTrip && activeTrip.status !== 'COMPLETED'">
           <h2 class="text-xl font-bold text-blue-600 mb-2">Active Trip</h2>
-          <div class="p-3 bg-blue-50 rounded-lg">
+          <div class="p-3 bg-blue-50 rounded-lg space-y-1">
             <p>
-              <strong>Status:</strong> <span class="font-semibold">{{ activeTrip.status }}</span>
+              <strong>Status:</strong>
+              <span class="font-semibold">{{ activeTrip.status }}</span>
             </p>
-            <p><strong>Pickup:</strong> A location would be shown here.</p>
+            <p><strong>Pickup:</strong> {{ activeTrip.pickupName }}</p>
+            <p><strong>Destination:</strong> {{ activeTrip.destinationName }}</p>
+            <div v-if="activeTrip.userIndications" class="pt-1">
+              <p><strong>Indications:</strong> {{ activeTrip.userIndications }}</p>
+            </div>
             <div class="mt-4 flex flex-col space-y-2">
               <button
                 v-if="activeTrip.status === 'ACCEPTED'"
@@ -259,7 +334,6 @@ const updateMapForActiveTrip = () => {
           </div>
         </div>
 
-        <!-- Incoming Requests View -->
         <div v-else-if="isAvailable">
           <h2 class="text-xl font-bold text-gray-800 mb-2">Incoming Requests</h2>
           <div v-if="tripRequests.length === 0" class="text-center text-gray-500 pt-8">
@@ -271,8 +345,13 @@ const updateMapForActiveTrip = () => {
               :key="trip._id"
               class="p-3 bg-gray-100 rounded-lg shadow-sm"
             >
-              <p><strong>From:</strong> A location would be shown here.</p>
-              <p><strong>To:</strong> Another location would be shown here.</p>
+              <div class="space-y-1 text-sm">
+                <p><strong>From:</strong> {{ trip.pickupName }}</p>
+                <p><strong>To:</strong> {{ trip.destinationName }}</p>
+                <p v-if="trip.userIndications" class="pt-1">
+                  <strong>Indications:</strong> {{ trip.userIndications }}
+                </p>
+              </div>
               <button
                 @click="acceptTrip(trip._id)"
                 class="mt-2 w-full bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600"
@@ -283,13 +362,11 @@ const updateMapForActiveTrip = () => {
           </ul>
         </div>
 
-        <!-- Offline View -->
         <div v-else class="text-center text-gray-500 pt-8">
           <p>You are currently offline. Go online to receive ride requests.</p>
         </div>
       </div>
 
-      <!-- Footer -->
       <div class="pt-4 mt-auto border-t">
         <button
           @click="authStore.logout()"

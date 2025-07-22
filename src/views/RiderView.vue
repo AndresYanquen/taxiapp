@@ -28,9 +28,10 @@ const showLocationErrorModal = ref(false)
 const router = useRouter()
 
 // --- New State for Ride Request ---
+const pickupAddress = ref('Getting current location...')
 const destinationAddress = ref('')
+const userIndications = ref('') // <-- ADDED: For additional user instructions
 const selectedCarType = ref('')
-const carTypes = ref(['Standard', 'Comfort', 'XL', 'Premium'])
 
 // --- Leaflet Custom Icons ---
 const createDivIcon = (content: string, className: string) =>
@@ -88,10 +89,10 @@ const setupSocketListeners = () => {
 }
 
 const updateUIFromState = (newState: AppState, driver: Driver | null) => {
-  if (!map.value || !riderMarker.value) return
+  if (!map.value) return
 
   appState.value = newState
-  assignedDriver.value = driver
+  assignedDriver.value = driver // Assign the full driver object
 
   if (routePolyline.value) map.value.removeLayer(routePolyline.value)
   drivers.value.forEach((d) => map.value?.removeLayer(d.marker))
@@ -104,12 +105,19 @@ const updateUIFromState = (newState: AppState, driver: Driver | null) => {
 
     case 'ACCEPTED':
     case 'IN_PROGRESS':
-      if (driver) {
+      // Check for the full driver object and its location
+      if (driver && driver.location && riderMarker.value) {
         statusMessage.value = `${driver.name} is on the way!`
-        // In a real app, driver.location would be updated via a separate socket event
-        const driverPosition = L.latLng(6.248, -75.585) // Placeholder
+
+        // Create LatLng from the GeoJSON coordinates
+        const driverPosition = L.latLng(
+          driver.location.coordinates[1], // Latitude
+          driver.location.coordinates[0], // Longitude
+        )
+
         const driverMarker = L.marker(driverPosition, { icon: driverIcon }).addTo(map.value)
         drivers.value = [{ ...driver, marker: driverMarker }]
+
         map.value.fitBounds([driverMarker.getLatLng(), riderMarker.value.getLatLng()], {
           padding: [70, 70],
         })
@@ -130,9 +138,12 @@ const updateUIFromState = (newState: AppState, driver: Driver | null) => {
       appState.value = 'idle'
       assignedDriver.value = null
       destinationAddress.value = ''
+      userIndications.value = ''
       selectedCarType.value = ''
       localStorage.removeItem('rideId')
-      map.value.setView(riderMarker.value.getLatLng(), 15)
+      if (map.value && riderMarker.value) {
+        map.value.setView(riderMarker.value.getLatLng(), 19)
+      }
       break
   }
 }
@@ -156,6 +167,7 @@ const locateUserAndInitMap = async () => {
       })
       coords = position.coords
     }
+    console.log(coords.latitude, coords.longitude)
     const userPosition = L.latLng(coords.latitude, coords.longitude)
     statusMessage.value = ''
     initMap(userPosition)
@@ -166,13 +178,32 @@ const locateUserAndInitMap = async () => {
   }
 }
 
+const getCurrentPosition = async (): Promise<{ latitude: number; longitude: number }> => {
+  const platform = Capacitor.getPlatform()
+
+  if (platform !== 'web') {
+    // Use Capacitor Geolocation plugin for native platforms (iOS, Android)
+    const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true })
+    return position.coords
+  } else {
+    // Use the standard Web Geolocation API for browsers
+    const position = await new Promise<{ coords: GeolocationCoordinates }>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 10000, // Time in ms before the request times out
+      })
+    })
+    return position.coords
+  }
+}
+
 const initMap = (initialPosition: LatLng) => {
   if (!mapContainer.value) return
 
   map.value = L.map(mapContainer.value, {
     zoomControl: false,
     attributionControl: false,
-  }).setView(initialPosition, 15)
+  }).setView(initialPosition, 20)
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
@@ -181,10 +212,37 @@ const initMap = (initialPosition: LatLng) => {
 
   L.control.zoom({ position: 'topright' }).addTo(map.value)
 
-  riderMarker.value = L.marker(initialPosition, { icon: riderIcon })
+  riderMarker.value = L.marker(initialPosition, { icon: riderIcon, draggable: true })
     .addTo(map.value)
-    .bindPopup('Estàs Aquì')
+    .bindPopup('Your pickup location')
     .openPopup()
+
+  // Update address when marker is dragged
+  riderMarker.value.on('dragend', (event) => {
+    const marker = event.target
+    const position = marker.getLatLng()
+    reverseGeocode(position)
+  })
+
+  // Initial address lookup
+  console.log('riderMarker.value.getLatLng()', riderMarker.value.getLatLng())
+  reverseGeocode(initialPosition)
+}
+
+const reverseGeocode = async (latlng: LatLng) => {
+  try {
+    const response = await axios.get(
+      `${import.meta.env.VITE_BACKEND_URL}/api/location/reverse-geocode?lat=${latlng.lat}&lng=${latlng.lng}`,
+      {
+        headers: { Authorization: `Bearer ${authStore.user.token}` },
+      },
+    )
+
+    console.log('response reverse location', response)
+    if (response.data && response.data['address']) {
+      pickupAddress.value = response.data['address'] // Example address
+    }
+  } catch (error) {}
 }
 
 const checkForActiveRide = async () => {
@@ -194,9 +252,12 @@ const checkForActiveRide = async () => {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/trips/rider/active`, {
       headers: { Authorization: `Bearer ${authStore.user.token}` },
     })
+
     const activeTrip = response.data
     if (activeTrip) {
       rideId.value = activeTrip._id
+      // The backend will now send the full driver object in the 'driverId' field.
+      // We pass this directly to our updated UI function.
       updateUIFromState(activeTrip.status, activeTrip.driverId)
       setupSocketListeners()
     } else {
@@ -209,24 +270,41 @@ const checkForActiveRide = async () => {
 }
 
 const requestRide = async () => {
-  if (!riderMarker.value || !destinationAddress.value || !selectedCarType.value) return
+  if (!riderMarker.value || !destinationAddress.value) return
   updateUIFromState('REQUESTED', null)
 
   try {
+    // 1. Obtenemos la ubicación de recogida en formato {lat, lng}
+    const pickupLatLng = riderMarker.value.getLatLng()
+    console.log('pickupLatLng', pickupLatLng)
+    // --- INICIO DE LA CORRECCIÓN ---
+    // 2. Transformamos las ubicaciones al formato GeoJSON que el backend espera
+    const pickupGeoJSON = {
+      type: 'Point',
+      coordinates: [pickupLatLng.lng, pickupLatLng.lat], // Formato [longitud, latitud]
+    }
+
+    // NOTA: Por ahora, el destino sigue siendo un marcador de posición.
+    // En el futuro, aquí convertirías la dirección de destino en coordenadas.
+    const dropoffGeoJSON = {
+      type: 'Point',
+      coordinates: [0, 0], // Placeholder en formato GeoJSON
+    }
+    // --- FIN DE LA CORRECCIÓN ---
+
     const res = await axios.post(
       `${import.meta.env.VITE_BACKEND_URL}/api/trips/request`,
       {
-        pickupLocation: riderMarker.value.getLatLng(),
-        // In a real app, a geocoding API would convert the address to coordinates.
-        dropoffAddress: destinationAddress.value,
-        dropoffLocation: {
-          lat: riderMarker.value.getLatLng().lat + 0.02, // Simulated dropoff
-          lng: riderMarker.value.getLatLng().lng + 0.02,
-        },
-        carType: selectedCarType.value,
+        // 3. Enviamos los datos en el nuevo formato
+        pickupLocation: pickupGeoJSON,
+        dropoffLocation: dropoffGeoJSON,
+        pickupName: pickupAddress.value,
+        destinationName: destinationAddress.value,
+        userIndications: userIndications.value,
       },
       { headers: { Authorization: `Bearer ${authStore.user.token}` } },
     )
+
     rideId.value = res.data._id
     localStorage.setItem('rideId', rideId.value!)
     setupSocketListeners()
@@ -282,12 +360,30 @@ const drawRoute = (start: LatLng, end: LatLng) => {
 
     <div class="ui-container absolute bottom-10 left-0 w-full p-4 z-20">
       <transition name="fade" mode="out-in">
-        <!-- RIDE REQUEST FORM (IDLE STATE) -->
         <div
           v-if="appState === 'idle'"
           key="idle"
-          class="bg-white rounded-xl shadow-2xl p-5 max-w-md mx-auto space-y-4"
+          class="relative bg-white rounded-xl shadow-2xl p-5 max-w-md mx-auto space-y-4"
         >
+          <div class="absolute top-4 right-4">
+            <router-link
+              to="/history"
+              class="px-2 rounded-full hover:bg-gray-100 transition-colors block"
+            >
+              History
+            </router-link>
+          </div>
+
+          <div>
+            <label for="pickup" class="block text-sm font-medium text-gray-700">Pick up from</label>
+            <input
+              type="text"
+              id="pickup"
+              v-model="pickupAddress"
+              placeholder="Drag marker to set pickup"
+              class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            />
+          </div>
           <div>
             <label for="destination" class="block text-sm font-medium text-gray-700"
               >Where to?</label
@@ -301,33 +397,53 @@ const drawRoute = (start: LatLng, end: LatLng) => {
             />
           </div>
           <div>
-            <label for="car-type" class="block text-sm font-medium text-gray-700"
-              >Select ride type</label
+            <label for="indications" class="block text-sm font-medium text-gray-700"
+              >Indicaciones DIR recogida</label
             >
-            <select
-              id="car-type"
-              v-model="selectedCarType"
-              class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-            >
-              <option value="" disabled>Choose a car type</option>
-              <option v-for="car in carTypes" :key="car" :value="car">{{ car }}</option>
-            </select>
+            <input
+              type="text"
+              id="indications"
+              v-model="userIndications"
+              placeholder="e.g., building with a red door"
+              class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            />
           </div>
           <button
             @click="requestRide"
-            :disabled="!destinationAddress || !selectedCarType || !!statusMessage"
+            :disabled="!destinationAddress || !!statusMessage"
             class="w-full bg-black text-white font-bold py-3 px-12 rounded-lg shadow-lg hover:bg-gray-800 transition-transform transform hover:scale-105 disabled:bg-gray-500 disabled:cursor-not-allowed"
           >
             Request Ride
           </button>
         </div>
 
-        <!-- TRIP IN PROGRESS PANEL -->
         <div
           v-else-if="(appState === 'ACCEPTED' || appState === 'IN_PROGRESS') && assignedDriver"
           key="in-progress"
-          class="bg-white rounded-xl shadow-2xl p-5 max-w-md mx-auto"
+          class="relative bg-white rounded-xl shadow-2xl p-5 max-w-md mx-auto"
         >
+          <div class="absolute top-4 right-4">
+            <router-link
+              to="/history"
+              class="p-2 rounded-full hover:bg-gray-100 transition-colors block"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6 text-gray-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                />
+              </svg>
+            </router-link>
+          </div>
+
           <div class="flex items-center">
             <div
               class="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center text-white text-3xl mr-4 shrink-0"

@@ -50,7 +50,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       // Redirect user to the appropriate dashboard based on their role
       if (role === 'driver') {
-        router.push('/driver-dashboard')
+        router.push('/driver')
       } else {
         router.push('/request-ride') // Default to rider dashboard
       }
@@ -59,6 +59,11 @@ export const useAuthStore = defineStore('auth', () => {
       // You can throw the error to be caught in the component for UI updates
       throw error
     }
+  }
+
+  function saveTokenOnSignUp({ token, role }) {
+    user.value = { token, role }
+    localStorage.setItem('user', JSON.stringify(user.value))
   }
 
   /**
@@ -79,6 +84,7 @@ export const useAuthStore = defineStore('auth', () => {
     authToken,
     userRole,
     login,
+    saveTokenOnSignUp,
     logout,
   }
 })

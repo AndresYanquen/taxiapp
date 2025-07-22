@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Form, Field, ErrorMessage, configure } from 'vee-validate'
+import { useAuthStore } from '@/stores/auth.store'
 import * as yup from 'yup'
 
 configure({
@@ -14,7 +15,7 @@ configure({
 // --- Yup Validation Schema ---
 // This schema defines all the validation rules for the form.
 const schema = yup.object({
-  fullName: yup
+  name: yup
     .string()
     .required('El nombre completo es obligatorio')
     .min(3, 'Debe contener al menos 3 caracteres'),
@@ -45,6 +46,8 @@ const togglePasswordVisibility = () => {
   isPasswordVisible.value = !isPasswordVisible.value
 }
 
+const authStore = useAuthStore()
+
 const passwordFieldType = computed(() => {
   return isPasswordVisible.value ? 'text' : 'password'
 })
@@ -69,7 +72,7 @@ const handleSignup = async (values: any) => {
       },
       // `values` object comes directly from VeeValidate
       body: JSON.stringify({
-        fullName: values.fullName,
+        name: values.name,
         phoneNumber: values.phoneNumber,
         email: values.email,
         password: values.password,
@@ -83,7 +86,12 @@ const handleSignup = async (values: any) => {
     }
 
     console.log('Signup successful:', data)
-    router.push('/login')
+    authStore.saveTokenOnSignUp(data)
+    if (role.value === 'user') {
+      router.push('/request-ride')
+    } else {
+      router.push('/driver')
+    }
   } catch (error: any) {
     console.error('Signup failed:', error)
     errorMessage.value = error.message
@@ -148,14 +156,14 @@ const handleSignup = async (values: any) => {
             <label for="full-name" class="sr-only">Full name</label>
             <Field
               id="full-name"
-              name="fullName"
+              name="name"
               type="text"
-              :class="{ 'border-red-500': errors.fullName }"
+              :class="{ 'border-red-500': errors.name }"
               class="relative block w-full px-3 py-3 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               placeholder="Full name"
               @input=""
             />
-            <ErrorMessage name="fullName" class="text-red-500 text-xs mt-1" />
+            <ErrorMessage name="name" class="text-red-500 text-xs mt-1" />
           </div>
           <!-- Phone Number -->
           <div>
