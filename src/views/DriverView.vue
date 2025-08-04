@@ -6,7 +6,7 @@ import { io, Socket } from 'socket.io-client'
 import type { Map as LeafletMap, LatLng, Marker } from 'leaflet'
 import { useAuthStore } from '@/stores/auth.store'
 import { useRouter } from 'vue-router'
-import type { Trip, Driver } from '../types' // Assuming you have a Trip type
+import type { Trip, Driver } from '../types'
 import { Capacitor } from '@capacitor/core'
 import { Geolocation } from '@capacitor/geolocation'
 
@@ -18,18 +18,15 @@ const mapContainer = ref<HTMLElement | null>(null)
 const map = ref<LeafletMap | null>(null)
 const driverMarker = ref<Marker | null>(null)
 const riderMarker = ref<Marker | null>(null)
-
-// --- State for Location & Errors (New) ---
 const statusMessage = ref('')
 const showLocationErrorModal = ref(false)
-
 const isAvailable = ref(false)
 const isLoadingAvailability = ref(false)
 const activeTrip = ref<Trip | null>(null)
 const tripRequests = ref<Trip[]>([])
-
 const authStore = useAuthStore()
 const router = useRouter()
+let locationInterval: number | null = null
 
 // --- Leaflet Custom Icons ---
 const createDivIcon = (content: string, className: string) =>
@@ -37,31 +34,22 @@ const createDivIcon = (content: string, className: string) =>
 const driverIcon = createDivIcon('🚗', 'custom-icon custom-icon-driver')
 const riderIcon = createDivIcon('🧍', 'custom-icon custom-icon-rider')
 
-let locationInterval: number | null = null
-
-// This is the watch effect from the previous answer, now updated
+// --- Lifecycle and Watchers ---
 watch(isAvailable, (isNowAvailable) => {
   if (isNowAvailable) {
-    // The driver just went online. Start sending location updates.
     locationInterval = window.setInterval(async () => {
       try {
-        // Use the new reusable function here as well
         const { latitude, longitude } = await getCurrentPosition()
-        console.log('location driver update', latitude, longitude)
         const newLatLng = L.latLng(latitude, longitude)
-
         driverMarker.value?.setLatLng(newLatLng)
-
         if (socket && socket.connected) {
           socket.emit('update-location', { lat: latitude, lng: longitude })
         }
       } catch (error) {
         console.error('Error sending location update:', error)
-        // Optionally, you could stop the interval if location fails repeatedly
       }
-    }, 10000) // Send update every 10 seconds
+    }, 10000)
   } else {
-    // The driver just went offline. Stop sending updates.
     if (locationInterval) {
       clearInterval(locationInterval)
       locationInterval = null
@@ -69,16 +57,13 @@ watch(isAvailable, (isNowAvailable) => {
   }
 })
 
-// --- Lifecycle Hooks ---
 onMounted(async () => {
-  // Authentication and Role Guard
+  console.log('authStore', authStore)
   if (!authStore.isAuthenticated || authStore.userRole !== 'driver') {
     authStore.logout()
     router.push('/login')
     return
   }
-
-  // **MODIFICATION**: Call the new location function instead of initMap directly
   await locateUserAndInitMap()
   setupSocketListeners()
   fetchDriverState()
@@ -86,72 +71,20 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (socket) socket.disconnect()
-  if (locationInterval) {
-    clearInterval(locationInterval)
-  }
+  if (locationInterval) clearInterval(locationInterval)
 })
 
-const getCurrentPosition = async (): Promise<{ latitude: number; longitude: number }> => {
-  const platform = Capacitor.getPlatform()
-
-  if (platform !== 'web') {
-    // Use Capacitor Geolocation plugin for native platforms (iOS, Android)
-    const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true })
-    return position.coords
-  } else {
-    // Use the standard Web Geolocation API for browsers
-    const position = await new Promise<{ coords: GeolocationCoordinates }>((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 10000, // Time in ms before the request times out
-      })
-    })
-    return position.coords
-  }
-}
-// --- Core Functions ---
-
-// **NEW FUNCTION**: Integrated from your request
-const locateUserAndInitMap = async () => {
-  try {
-    // Call our new, reusable function to get the coordinates
-    const coords = await getCurrentPosition()
-
-    // Once we have coordinates, initialize the map at that position
-    const userPosition = L.latLng(coords.latitude, coords.longitude)
-    statusMessage.value = ''
-    initMap(userPosition)
-  } catch (error) {
-    console.error('Error getting initial location:', error)
-    statusMessage.value = 'Could not access your location. Defaulting to Medellín.'
-    showLocationErrorModal.value = true
-
-    // Fallback to a default location if geolocation fails
-    initMap(L.latLng(6.2442, -75.5812))
-  }
-}
-
-// **MODIFICATION**: initMap now accepts the user's position as an argument
-const initMap = (initialPosition: LatLng) => {
-  if (!mapContainer.value) return
-
-  map.value = L.map(mapContainer.value).setView(initialPosition, 19)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    maxZoom: 19,
-  }).addTo(map.value)
-
-  // Add driver marker at the fetched initial position
-  driverMarker.value = L.marker(initialPosition, { icon: driverIcon, draggable: true }).addTo(
-    map.value,
-  )
-  driverMarker.value.bindPopup('Your Location')
-}
-
-// --- (The rest of your functions: setupSocketListeners, fetchDriverState, etc. remain unchanged) ---
+// --- Socket Listeners ---
 const setupSocketListeners = () => {
+  const token = authStore.authToken
+  if (!token) {
+    console.error('Authentication token not found, cannot connect socket.')
+    return
+  }
+
+  // ✅ 1. Corrected authentication object
   socket = io(import.meta.env.VITE_BACKEND_URL, {
-    auth: { token: authStore.authToken },
+    auth: { token: token },
   })
 
   socket.on('connect', () => {
@@ -159,29 +92,104 @@ const setupSocketListeners = () => {
   })
 
   socket.on('new-trip-request', (newTrip: Trip) => {
-    console.log('New trip request received:', newTrip)
+    console.log('newTrip', newTrip)
     if (isAvailable.value && !activeTrip.value) {
       tripRequests.value.push(newTrip)
     }
   })
 
   socket.on('trip-unavailable', ({ tripId }) => {
+    console.log('tripUnavailable', tripId)
     tripRequests.value = tripRequests.value.filter((trip) => trip._id !== tripId)
+  })
+
+  socket.on('trip-updated', (updatedTrip: Trip) => {
+    console.log('trip-updated', updatedTrip)
+    // Check if the update is for the currently active trip
+    if (activeTrip.value && activeTrip.value._id === updatedTrip._id) {
+      activeTrip.value = updatedTrip // Update the entire trip object
+
+      if (updatedTrip.status === 'CANCELLED') {
+        isAvailable.value = true
+        alert('The rider has cancelled the trip.')
+        activeTrip.value = null // Clear the active trip
+        if (riderMarker.value && map.value) {
+          map.value.removeLayer(riderMarker.value)
+          riderMarker.value = null
+        }
+      }
+
+      if (updatedTrip.status === 'COMPLETED') {
+        // Handle completion if needed, though your handleTripAction may cover this
+        activeTrip.value = null
+      }
+    }
   })
 }
 
+// --- Core Functions ---
+const getCurrentPosition = async (): Promise<{ latitude: number; longitude: number }> => {
+  const platform = Capacitor.getPlatform()
+  if (platform !== 'web') {
+    const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true })
+    return position.coords
+  } else {
+    const position = await new Promise<{ coords: GeolocationCoordinates }>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+      })
+    })
+    return position.coords
+  }
+}
+
+const locateUserAndInitMap = async () => {
+  try {
+    const coords = await getCurrentPosition()
+    const userPosition = L.latLng(coords.latitude, coords.longitude)
+    initMap(userPosition)
+  } catch (error) {
+    console.error('Error getting initial location:', error)
+    showLocationErrorModal.value = true
+    initMap(L.latLng(6.2442, -75.5812)) // Fallback to Medellín
+  }
+}
+
+const initMap = (initialPosition: LatLng) => {
+  if (!mapContainer.value) return
+  map.value = L.map(mapContainer.value).setView(initialPosition, 19)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    maxZoom: 19,
+  }).addTo(map.value)
+  driverMarker.value = L.marker(initialPosition, { icon: driverIcon }).addTo(map.value)
+}
+
+// In DriverView.vue
+
 const fetchDriverState = async () => {
   try {
-    const tripRes = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/drivers/active-trip`, {
+    // Call the new endpoint to get the full driver state
+    const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/drivers/me`, {
       headers: { Authorization: `Bearer ${authStore.authToken}` },
     })
 
-    if (tripRes.data.activeTrip) {
-      activeTrip.value = tripRes.data.activeTrip
+    const { driver, activeTrip: trip } = res.data
+
+    // Correctly set the availability from the database
+    isAvailable.value = driver.isAvailable
+
+    // Set the active trip if one exists
+    if (trip) {
+      activeTrip.value = trip
+      // An active trip always means the driver is not available
       isAvailable.value = false
       updateMapForActiveTrip()
-    } else {
-      isAvailable.value = false
+      // Join the trip's socket room if reconnecting
+      if (socket && socket.connected) {
+        socket.emit('joinRideRoom', trip._id)
+      }
     }
   } catch (error) {
     console.error('Error fetching driver state:', error)
@@ -218,6 +226,11 @@ const acceptTrip = async (tripId: string) => {
     activeTrip.value = res.data
     isAvailable.value = false
     tripRequests.value = []
+
+    // This part is correct: you tell the server to join the room
+    if (socket && socket.connected) {
+      socket.emit('joinRideRoom', tripId)
+    }
     updateMapForActiveTrip()
   } catch (error) {
     alert('Could not accept trip. It may have been taken by another driver.')
@@ -238,7 +251,10 @@ const handleTripAction = async (action: 'start' | 'complete') => {
     if (action === 'complete') {
       activeTrip.value = null
       isAvailable.value = true
-      if (riderMarker.value) map.value?.removeLayer(riderMarker.value)
+      if (riderMarker.value && map.value) {
+        map.value.removeLayer(riderMarker.value)
+        riderMarker.value = null
+      }
       map.value?.setView(driverMarker.value!.getLatLng(), 13)
     }
   } catch (error) {
@@ -249,22 +265,17 @@ const handleTripAction = async (action: 'start' | 'complete') => {
 const updateMapForActiveTrip = () => {
   if (!activeTrip.value || !map.value || !driverMarker.value) return
 
-  // Create the Leaflet LatLng object from the GeoJSON coordinates array.
-  // The format is [longitude, latitude], so we access them by index.
   const riderLatLng = L.latLng(
     activeTrip.value.pickupLocation.coordinates[1], // Latitude
     activeTrip.value.pickupLocation.coordinates[0], // Longitude
   )
 
-  // The rest of the function logic remains the same.
   if (!riderMarker.value) {
     riderMarker.value = L.marker(riderLatLng, { icon: riderIcon }).addTo(map.value)
   } else {
     riderMarker.value.setLatLng(riderLatLng)
   }
-  riderMarker.value.bindPopup('Pickup Location')
 
-  // Adjust map view to show both driver and rider
   map.value.fitBounds(L.latLngBounds([driverMarker.value.getLatLng(), riderLatLng]), {
     padding: [50, 50],
   })

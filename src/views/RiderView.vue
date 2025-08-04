@@ -9,6 +9,7 @@ import { Geolocation } from '@capacitor/geolocation'
 import type { AppState, Driver } from '../types' // Simplified Driver type
 import { useAuthStore } from '@/stores/auth.store'
 import { useRouter } from 'vue-router'
+import { Dialog } from '@capacitor/dialog'
 
 // --- API and Socket Configuration ---
 let socket: Socket
@@ -24,7 +25,9 @@ const rideId = ref<string | null>(null)
 const appState = ref<AppState>('idle')
 const statusMessage = ref('Finding your location...')
 const assignedDriver = ref<Driver | null>(null)
-const showLocationErrorModal = ref(false)
+const showModal = ref(false)
+const modalTitle = ref('')
+const modalMessage = ref('')
 const router = useRouter()
 
 // --- New State for Ride Request ---
@@ -32,6 +35,11 @@ const pickupAddress = ref('Getting current location...')
 const destinationAddress = ref('')
 const userIndications = ref('') // <-- ADDED: For additional user instructions
 const selectedCarType = ref('')
+
+let pollingInterval = null
+let pollingAttempts = 0
+const MAX_POLLING_ATTEMPTS = 3 // Intentará 3 veces
+const POLLING_INTERVAL_MS = 10000
 
 // --- Leaflet Custom Icons ---
 const createDivIcon = (content: string, className: string) =>
@@ -57,17 +65,73 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (pollingInterval) {
+    clearInterval(pollingInterval)
+  }
   if (socket) socket.disconnect()
 })
 
+const displayModal = (title: string, message: string) => {
+  modalTitle.value = title
+  modalMessage.value = message
+  showModal.value = true
+}
+
 // --- WebSocket and UI State Functions ---
 
+const findDriverWithPolling = async (pickupLatLng) => {
+  console.log('findDriverWithPolling')
+  pollingAttempts++
+  statusMessage.value = `Buscando conductores... (Intento ${pollingAttempts}/${MAX_POLLING_ATTEMPTS})`
+
+  try {
+    // Usamos la ruta existente que busca conductores cercanos
+    const response = await axios.get(
+      `${import.meta.env.VITE_BACKEND_URL}/api/drivers/nearby?lat=${pickupLatLng.lat}&lng=${pickupLatLng.lng}`,
+      { headers: { Authorization: `Bearer ${authStore.user.token}` } },
+    )
+
+    // Si encontramos conductores, procedemos a crear el viaje
+    if (response.data && response.data.length > 0) {
+      console.log('Conductores encontrados. Creando el viaje...')
+      if (pollingInterval) clearInterval(pollingInterval)
+      // Llama a la función que realmente crea el viaje en la base de datos
+      await createTripRequest(pickupLatLng)
+      return
+    }
+
+    // Si no hay conductores y no hemos superado los intentos, volvemos a intentar
+    if (pollingAttempts >= MAX_POLLING_ATTEMPTS) {
+      if (pollingInterval) clearInterval(pollingInterval)
+
+      // Reemplaza el alert() con esto:
+      await Dialog.alert({
+        title: 'Sin Conductores Disponibles',
+        message:
+          'Lo sentimos, no hay conductores disponibles en este momento. Por favor, inténtalo de nuevo más tarde.',
+        buttonTitle: 'Entendido',
+      })
+
+      updateUIFromState('idle', null)
+    }
+  } catch (error) {
+    console.error('Error buscando conductores:', error)
+    if (pollingInterval) clearInterval(pollingInterval)
+    alert('Ocurrió un error al buscar conductores.')
+    updateUIFromState('idle', null)
+  }
+}
+
 const setupSocketListeners = () => {
+  const currentUser = authStore.currentUser
+
+  console.log('Attempting to connect socket with token:', currentUser)
+
   if (!rideId.value) return
   if (socket?.connected) socket.disconnect()
 
   socket = io(import.meta.env.VITE_BACKEND_URL, {
-    auth: { token: authStore.user.token },
+    auth: currentUser,
   })
 
   socket.on('connect', () => {
@@ -80,9 +144,9 @@ const setupSocketListeners = () => {
     updateUIFromState(updatedTrip.status, updatedTrip.driverId)
   })
 
-  socket.on('trip-accepted', (acceptedTrip) => {
+  socket.on('trip-accepted', ({ trip: acceptedTrip, driver }) => {
     console.log('Trip was accepted:', acceptedTrip)
-    updateUIFromState(acceptedTrip.status, acceptedTrip.driverId)
+    updateUIFromState(acceptedTrip.status, driver)
   })
 
   socket.on('disconnect', () => console.log('Socket disconnected.'))
@@ -100,7 +164,7 @@ const updateUIFromState = (newState: AppState, driver: Driver | null) => {
 
   switch (newState) {
     case 'REQUESTED':
-      statusMessage.value = 'Finding nearest driver...'
+      statusMessage.value = 'Buscando conductores cercanos'
       break
 
     case 'ACCEPTED':
@@ -132,6 +196,61 @@ const updateUIFromState = (newState: AppState, driver: Driver | null) => {
       break
 
     case 'CANCELLED':
+      {
+        let modalTitle = 'Viaje Cancelado'
+        let modalMessage = 'El viaje ha sido cancelado.' // Mensaje por defecto
+
+        // El segundo argumento 'driver' contiene los datos del viaje actualizado
+        const tripData = driver
+
+        if (tripData) {
+          // Escenario 1: El pasajero canceló el viaje
+          if (tripData.cancelledBy === 'user') {
+            modalMessage = 'Has cancelado tu viaje exitosamente.'
+            // Si se aplicó una tarifa, se lo informamos
+            if (tripData.cancellationFee && tripData.cancellationFee > 0) {
+              const formattedFee = new Intl.NumberFormat('es-CO', {
+                style: 'currency',
+                currency: 'COP',
+                minimumFractionDigits: 0,
+              }).format(tripData.cancellationFee)
+              modalMessage += ` Se aplicó un cargo de ${formattedFee}.`
+            }
+          }
+          // Escenario 2: El conductor canceló el viaje
+          else if (tripData.cancelledBy === 'driver') {
+            modalTitle = 'El Conductor Canceló'
+            modalMessage =
+              'Tu conductor ha cancelado. Puedes solicitar un nuevo viaje si lo deseas.'
+          }
+          // Escenario 3: El sistema canceló por timeout
+          else {
+            modalTitle = 'Búsqueda Terminada'
+            modalMessage =
+              'Lo sentimos, no encontramos un conductor disponible a tiempo. Por favor, inténtalo de nuevo.'
+          }
+        }
+
+        // Mostramos el modal con el mensaje correspondiente
+        displayModal(modalTitle, modalMessage)
+
+        // --- Reinicio completo de la interfaz ---
+        statusMessage.value = ''
+        appState.value = 'idle'
+        assignedDriver.value = null
+        rideId.value = null // Limpia también la variable reactiva
+        localStorage.removeItem('rideId')
+
+        // Restablece la vista del mapa a la posición del pasajero
+        if (map.value && riderMarker.value) {
+          if (routePolyline.value) {
+            map.value.removeLayer(routePolyline.value)
+            routePolyline.value = null
+          }
+          map.value.setView(riderMarker.value.getLatLng(), 19)
+        }
+      }
+      break
     case 'idle':
     default:
       statusMessage.value = ''
@@ -174,7 +293,10 @@ const locateUserAndInitMap = async () => {
   } catch (error) {
     console.error('Error getting location:', error)
     statusMessage.value = 'Could not access your location.'
-    showLocationErrorModal.value = true
+    displayModal(
+      'Error de Ubicación',
+      'No pudimos obtener tu ubicación. Por favor, activa los servicios de localización en tu dispositivo o navegador.',
+    )
   }
 }
 
@@ -230,6 +352,8 @@ const initMap = (initialPosition: LatLng) => {
 }
 
 const reverseGeocode = async (latlng: LatLng) => {
+  pickupAddress.value = 'Buscando dirección...'
+
   try {
     const response = await axios.get(
       `${import.meta.env.VITE_BACKEND_URL}/api/location/reverse-geocode?lat=${latlng.lat}&lng=${latlng.lng}`,
@@ -240,7 +364,10 @@ const reverseGeocode = async (latlng: LatLng) => {
 
     console.log('response reverse location', response)
     if (response.data && response.data['address']) {
+      console.log('response reverse location', response.data['address'])
       pickupAddress.value = response.data['address'] // Example address
+    } else {
+      pickupAddress.value = 'Dirección no encontrada.'
     }
   } catch (error) {}
 }
@@ -271,31 +398,45 @@ const checkForActiveRide = async () => {
 
 const requestRide = async () => {
   if (!riderMarker.value || !destinationAddress.value) return
+
+  // Reiniciamos los contadores y el estado de la UI
+  pollingAttempts = 0
+  if (pollingInterval) clearInterval(pollingInterval)
   updateUIFromState('REQUESTED', null)
 
+  const pickupLatLng = riderMarker.value.getLatLng()
+
+  // Inicia la primera búsqueda inmediatamente
+  findDriverWithPolling(pickupLatLng)
+
+  // Configura las búsquedas posteriores a intervalos
+  pollingInterval = setInterval(() => {
+    if (pollingAttempts < MAX_POLLING_ATTEMPTS) {
+      findDriverWithPolling(pickupLatLng)
+    } else {
+      clearInterval(pollingInterval)
+    }
+  }, POLLING_INTERVAL_MS)
+}
+
+const createTripRequest = async (pickupLatLng) => {
   try {
-    // 1. Obtenemos la ubicación de recogida en formato {lat, lng}
-    const pickupLatLng = riderMarker.value.getLatLng()
-    console.log('pickupLatLng', pickupLatLng)
-    // --- INICIO DE LA CORRECCIÓN ---
-    // 2. Transformamos las ubicaciones al formato GeoJSON que el backend espera
+    statusMessage.value = 'Esperando respuesta del conductor...'
+
+    // Transformamos las ubicaciones al formato GeoJSON que el backend espera
     const pickupGeoJSON = {
       type: 'Point',
-      coordinates: [pickupLatLng.lng, pickupLatLng.lat], // Formato [longitud, latitud]
+      coordinates: [pickupLatLng.lng, pickupLatLng.lat],
     }
 
-    // NOTA: Por ahora, el destino sigue siendo un marcador de posición.
-    // En el futuro, aquí convertirías la dirección de destino en coordenadas.
     const dropoffGeoJSON = {
       type: 'Point',
-      coordinates: [0, 0], // Placeholder en formato GeoJSON
+      coordinates: [0, 0], // Placeholder
     }
-    // --- FIN DE LA CORRECCIÓN ---
 
     const res = await axios.post(
       `${import.meta.env.VITE_BACKEND_URL}/api/trips/request`,
       {
-        // 3. Enviamos los datos en el nuevo formato
         pickupLocation: pickupGeoJSON,
         dropoffLocation: dropoffGeoJSON,
         pickupName: pickupAddress.value,
@@ -306,11 +447,11 @@ const requestRide = async () => {
     )
 
     rideId.value = res.data._id
-    localStorage.setItem('rideId', rideId.value!)
+    localStorage.setItem('rideId', rideId.value)
     setupSocketListeners()
   } catch (error) {
-    console.error('Error requesting ride:', error)
-    alert('Could not request a ride.')
+    console.error('Error creando la solicitud de viaje:', error)
+    alert('No se pudo crear la solicitud de viaje.')
     updateUIFromState('idle', null)
   }
 }
@@ -478,20 +619,19 @@ const drawRoute = (start: LatLng, end: LatLng) => {
     <!-- LOCATION ERROR MODAL -->
     <transition name="fade">
       <div
-        v-if="showLocationErrorModal"
+        v-if="showModal"
         class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[5000]"
       >
         <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm text-center">
-          <h3 class="text-xl font-bold text-gray-800 mb-2">Location Error</h3>
-          <p class="text-gray-600 mb-6">
-            We couldn't get your location. Please enable location services for this app in your
-            device or browser settings.
-          </p>
+          <h3 class="text-xl font-bold text-gray-800 mb-2">{{ modalTitle }}</h3>
+
+          <p class="text-gray-600 mb-6">{{ modalMessage }}</p>
+
           <button
-            @click="showLocationErrorModal = false"
+            @click="showModal = false"
             class="bg-black text-white font-bold py-3 px-8 rounded-lg w-full hover:bg-gray-800 transition"
           >
-            OK
+            Entendido
           </button>
         </div>
       </div>

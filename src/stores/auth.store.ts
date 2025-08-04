@@ -23,6 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!user.value?.token)
   const authToken = computed(() => user.value?.token)
   const userRole = computed(() => user.value?.role)
+  const currentUser = computed(() => user.value)
 
   // --- ACTIONS ---
 
@@ -33,7 +34,7 @@ export const useAuthStore = defineStore('auth', () => {
    */
   async function login(email, password) {
     try {
-      const response = await axios.post('http://localhost:3000/api/auth/login', {
+      const response = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/auth/login`, {
         // Adjust URL if needed
         email,
         password,
@@ -86,5 +87,6 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     saveTokenOnSignUp,
     logout,
+    currentUser,
   }
 })
