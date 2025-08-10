@@ -8,6 +8,7 @@
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
+    "build-netlify": "vue-tsc && vite build && echo '/* /index.html  200' > dist/_redirects",
     "type-check": "vue-tsc --build",
     "format": "prettier --write src/"
   },
