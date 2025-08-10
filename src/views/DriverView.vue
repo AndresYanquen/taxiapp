@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import L from 'leaflet'
 import axios from 'axios'
+import { App } from '@capacitor/app'
 import { io, Socket } from 'socket.io-client'
 import type { Map as LeafletMap, LatLng, Marker } from 'leaflet'
 import { useAuthStore } from '@/stores/auth.store'
@@ -34,21 +35,28 @@ const createDivIcon = (content: string, className: string) =>
 const driverIcon = createDivIcon('🚗', 'custom-icon custom-icon-driver')
 const riderIcon = createDivIcon('🧍', 'custom-icon custom-icon-rider')
 
+const sendLocationUpdate = async () => {
+  try {
+    const { latitude, longitude } = await getCurrentPosition()
+    const newLatLng = L.latLng(latitude, longitude)
+
+    driverMarker.value?.setLatLng(newLatLng)
+
+    if (socket && socket.connected) {
+      socket.emit('update-location', { lat: latitude, lng: longitude })
+    }
+  } catch (error) {
+    console.error('Error sending location update:', error)
+  }
+}
+
 // --- Lifecycle and Watchers ---
 watch(isAvailable, (isNowAvailable) => {
   if (isNowAvailable) {
-    locationInterval = window.setInterval(async () => {
-      try {
-        const { latitude, longitude } = await getCurrentPosition()
-        const newLatLng = L.latLng(latitude, longitude)
-        driverMarker.value?.setLatLng(newLatLng)
-        if (socket && socket.connected) {
-          socket.emit('update-location', { lat: latitude, lng: longitude })
-        }
-      } catch (error) {
-        console.error('Error sending location update:', error)
-      }
-    }, 10000)
+    sendLocationUpdate()
+
+    // Then, set the interval for all subsequent updates
+    locationInterval = window.setInterval(sendLocationUpdate, 20000)
   } else {
     if (locationInterval) {
       clearInterval(locationInterval)
@@ -67,12 +75,85 @@ onMounted(async () => {
   await locateUserAndInitMap()
   setupSocketListeners()
   fetchDriverState()
+  App.addListener('appStateChange', async (state) => {
+    if (!state.isActive) {
+      // The app is no longer active. Run our reliable cleanup task.
+      await goOfflineReliably()
+    }
+  })
 })
+
+const goOfflineReliably = async () => {
+  // First, request a background task ID from the OS
+  const taskId = await BackgroundTask.beforeExit(async () => {
+    // This callback will run if the task takes too long,
+    // so we must finish the task here as well.
+    BackgroundTask.finish({ taskId })
+  })
+
+  try {
+    console.log('Running reliable offline task in background...')
+    // Use your original, authenticated endpoint. This is more secure.
+    await axios.patch(
+      `${import.meta.env.VITE_BACKEND_URL}/api/drivers/availability`,
+      { isAvailable: false },
+      { headers: { Authorization: `Bearer ${authStore.authToken}` } },
+    )
+    console.log('✅ Driver set to offline reliably.')
+  } catch (error) {
+    console.error('Reliable offline task failed:', error)
+  } finally {
+    // IMPORTANT: Always finish the task to release the OS lock
+    BackgroundTask.finish({ taskId })
+  }
+}
 
 onUnmounted(() => {
   if (socket) socket.disconnect()
   if (locationInterval) clearInterval(locationInterval)
+
+  const url = `${import.meta.env.VITE_BACKEND_URL}/api/drivers/go-offline`
+  const driverId = authStore.user?.id
+
+  App.addListener('appStateChange', async (state) => {
+    if (!state.isActive) {
+      // The app is no longer active. Run our reliable cleanup task.
+      await goOfflineReliably()
+    }
+  })
 })
+
+const testOffline = () => {
+  console.log('Testing go offline request...')
+  const url = `${import.meta.env.VITE_BACKEND_URL}/api/drivers/availability`
+  const body = JSON.stringify({ isAvailable: false })
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${authStore.authToken}`,
+  }
+
+  fetch(url, {
+    method: 'PATCH',
+    body,
+    headers,
+  })
+    .then((response) => {
+      // Check if the request was successful (status code 200-299)
+      if (!response.ok) {
+        // If not, we throw an error to be caught by the .catch block
+        throw new Error(`Network response was not ok, status: ${response.status}`)
+      }
+      // If the response is OK, we parse the JSON body. This returns a promise.
+      return response.json()
+    })
+    .then((data) => {
+      // This .then() receives the resolved promise from response.json()
+      console.log('✅ Test successful. Server response data:', data)
+    })
+    .catch((err) => {
+      console.error('❌ Test error:', err)
+    })
+}
 
 // --- Socket Listeners ---
 const setupSocketListeners = () => {
@@ -295,6 +376,7 @@ const updateMapForActiveTrip = () => {
       </div>
 
       <div class="py-4 border-b flex items-center justify-between">
+        <button @click="testOffline" class="bg-yellow-400 p-2 rounded-lg">Test Go Offline</button>
         <span class="font-semibold text-lg">Go Online</span>
         <button
           @click="toggleAvailability"

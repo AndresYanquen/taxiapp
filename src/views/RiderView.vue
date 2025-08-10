@@ -33,6 +33,7 @@ const router = useRouter()
 // --- New State for Ride Request ---
 const pickupAddress = ref('Getting current location...')
 const destinationAddress = ref('')
+const isRequesting = ref(false)
 const userIndications = ref('') // <-- ADDED: For additional user instructions
 const selectedCarType = ref('')
 
@@ -105,6 +106,7 @@ const findDriverWithPolling = async (pickupLatLng) => {
       if (pollingInterval) clearInterval(pollingInterval)
 
       // Reemplaza el alert() con esto:
+      isRequesting.value = false
       await Dialog.alert({
         title: 'Sin Conductores Disponibles',
         message:
@@ -202,7 +204,7 @@ const updateUIFromState = (newState: AppState, driver: Driver | null) => {
 
         // El segundo argumento 'driver' contiene los datos del viaje actualizado
         const tripData = driver
-
+        console.log('tripData', tripData)
         if (tripData) {
           // Escenario 1: El pasajero canceló el viaje
           if (tripData.cancelledBy === 'user') {
@@ -223,15 +225,15 @@ const updateUIFromState = (newState: AppState, driver: Driver | null) => {
             modalMessage =
               'Tu conductor ha cancelado. Puedes solicitar un nuevo viaje si lo deseas.'
           }
-          // Escenario 3: El sistema canceló por timeout
-          else {
-            modalTitle = 'Búsqueda Terminada'
-            modalMessage =
-              'Lo sentimos, no encontramos un conductor disponible a tiempo. Por favor, inténtalo de nuevo.'
-          }
+        } // Escenario 3: El sistema canceló por timeout
+        else {
+          modalTitle = 'Búsqueda Terminada'
+          modalMessage =
+            'Lo sentimos, no encontramos un conductor disponible a tiempo. Por favor, inténtalo de nuevo.'
         }
 
         // Mostramos el modal con el mensaje correspondiente
+        isRequesting.value = false
         displayModal(modalTitle, modalMessage)
 
         // --- Reinicio completo de la interfaz ---
@@ -397,8 +399,8 @@ const checkForActiveRide = async () => {
 }
 
 const requestRide = async () => {
-  if (!riderMarker.value || !destinationAddress.value) return
-
+  if (!riderMarker.value || !destinationAddress.value || isRequesting.value) return
+  isRequesting.value = true // <-- Deshabilita el botón aquí
   // Reiniciamos los contadores y el estado de la UI
   pollingAttempts = 0
   if (pollingInterval) clearInterval(pollingInterval)
@@ -457,19 +459,41 @@ const createTripRequest = async (pickupLatLng) => {
 }
 
 const cancelRide = async () => {
+  // 1. Nos aseguramos de que hay un viaje activo para cancelar
   if (!rideId.value) return
-  try {
-    await axios.post(
-      `${import.meta.env.VITE_BACKEND_URL}/api/trips/${rideId.value}/cancel`,
-      {},
-      { headers: { Authorization: `Bearer ${authStore.user.token}` } },
-    )
-    if (socket) socket.disconnect()
-    updateUIFromState('CANCELLED', null)
-  } catch (error) {
-    console.error('Error canceling ride:', error)
-    alert('Could not cancel the ride.')
+
+  // 2. Usamos Capacitor Dialog para mostrar una ventana de confirmación
+  const { value } = await Dialog.confirm({
+    title: 'Confirmar Cancelación',
+    message: '¿Estás seguro de que quieres cancelar el viaje?',
+    okButtonTitle: 'Sí, Cancelar',
+    cancelButtonTitle: 'No',
+  })
+
+  // 3. Si el usuario presiona "Sí, Cancelar" (value es true), procedemos
+  if (value) {
+    try {
+      // 4. Se realiza la llamada a la API para cancelar el viaje en el backend
+      const response = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/trips/${rideId.value}/cancel`,
+        {},
+        { headers: { Authorization: `Bearer ${authStore.user.token}` } },
+      )
+
+      // El listener del socket se encargará de actualizar la UI, por lo que no es
+      // necesario llamar a updateUIFromState() aquí para evitar duplicidad.
+      updateUIFromState('CANCELLED', response.data)
+    } catch (error) {
+      console.error('Error canceling ride:', error)
+      // Mostramos un error si la API falla
+      await Dialog.alert({
+        title: 'Error',
+        message: 'No se pudo cancelar el viaje. Inténtalo de nuevo.',
+        buttonTitle: 'Entendido',
+      })
+    }
   }
+  // Si el usuario presiona "No", no se hace nada y la función termina.
 }
 
 const drawRoute = (start: LatLng, end: LatLng) => {
@@ -551,13 +575,50 @@ const drawRoute = (start: LatLng, end: LatLng) => {
           </div>
           <button
             @click="requestRide"
-            :disabled="!destinationAddress || !!statusMessage"
+            :disabled="!destinationAddress || !!statusMessage || isRequesting"
             class="w-full bg-black text-white font-bold py-3 px-12 rounded-lg shadow-lg hover:bg-gray-800 transition-transform transform hover:scale-105 disabled:bg-gray-500 disabled:cursor-not-allowed"
           >
-            Request Ride
+            {{ isRequesting ? 'Buscando conductor...' : 'Solicitar Viaje' }}
           </button>
         </div>
+        <div
+          v-else-if="appState === 'REQUESTED'"
+          key="requested"
+          class="bg-white rounded-xl shadow-2xl p-5 max-w-md mx-auto text-center"
+        >
+          <h2 class="text-xl font-bold text-gray-800">Buscando tu viaje...</h2>
+          <p class="text-gray-500 mt-2 mb-6">Estamos buscando el conductor más cercano.</p>
 
+          <div class="flex justify-center my-4">
+            <svg
+              class="animate-spin -ml-1 mr-3 h-8 w-8 text-black"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+          </div>
+
+          <button
+            @click="cancelRide"
+            class="w-full bg-red-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-red-600 transition"
+          >
+            Cancelar Búsqueda
+          </button>
+        </div>
         <div
           v-else-if="(appState === 'ACCEPTED' || appState === 'IN_PROGRESS') && assignedDriver"
           key="in-progress"

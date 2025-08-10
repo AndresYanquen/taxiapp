@@ -17,6 +17,10 @@ export default defineConfig({
       resolvers: [PrimeVueResolver()],
     }),
   ],
+  server: {
+    allowedHosts: ['936503239e3f.ngrok-free.app', '*'],
+  },
+
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
