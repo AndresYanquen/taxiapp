@@ -10,6 +10,7 @@ import type { AppState, Driver } from '../types' // Simplified Driver type
 import { useAuthStore } from '@/stores/auth.store'
 import { useRouter } from 'vue-router'
 import { Dialog } from '@capacitor/dialog'
+import SideMenu from '@/components/Rider/SideMenu.vue'
 
 // --- API and Socket Configuration ---
 let socket: Socket
@@ -506,12 +507,27 @@ const drawRoute = (start: LatLng, end: LatLng) => {
     dashArray: '10, 10',
   }).addTo(map.value)
 }
+
+const handleLogout = async () => {
+  // 1. Disconnect the socket if it's connected
+  if (socket) {
+    socket.disconnect()
+  }
+  // 2. Clear any local state or intervals
+  if (pollingInterval) {
+    clearInterval(pollingInterval)
+  }
+  // 3. Call the logout action from the Pinia store
+  authStore.logout()
+  // 4. Redirect the user to the login page
+  router.push('/login')
+}
 </script>
 
 <template>
   <div id="app-wrapper">
     <div id="map" ref="mapContainer"></div>
-
+    <SideMenu></SideMenu>
     <div class="ui-container absolute top-5 left-1/2 -translate-x-1/2 z-20 w-full max-w-sm px-4">
       <transition name="fade">
         <div

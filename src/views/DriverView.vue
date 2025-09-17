@@ -371,8 +371,10 @@ const updateMapForActiveTrip = () => {
       class="absolute top-0 left-0 bottom-0 z-[1000] w-full max-w-sm bg-white shadow-lg p-4 flex flex-col overflow-y-auto"
     >
       <div class="pb-4 border-b">
-        <h1 class="text-2xl font-bold">Driver Dashboard</h1>
-        <p class="text-gray-500">Welcome, Driver!</p>
+        <h1 class="text-2xl font-bold">
+          {{ $t('driver.mainScreen.welcome.title') }}
+        </h1>
+        <p class="text-gray-500">{{ $t('user.mainScreen.greeting') }}, Driver!</p>
       </div>
 
       <div class="py-4 border-b flex items-center justify-between">

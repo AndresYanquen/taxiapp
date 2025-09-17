@@ -15,10 +15,14 @@ configure({
 // --- Yup Validation Schema ---
 // This schema defines all the validation rules for the form.
 const schema = yup.object({
-  name: yup
+  firstName: yup // <-- CAMBIADO de 'name'
     .string()
-    .required('El nombre completo es obligatorio')
-    .min(3, 'Debe contener al menos 3 caracteres'),
+    .required('El nombre es obligatorio')
+    .min(2, 'Debe contener al menos 2 caracteres'),
+  lastName: yup // <-- AÑADIDO
+    .string()
+    .required('El apellido es obligatorio')
+    .min(2, 'Debe contener al menos 2 caracteres'),
   phoneNumber: yup
     .string()
     .required('El número de teléfono es obligatorio')
@@ -72,7 +76,8 @@ const handleSignup = async (values: any) => {
       },
       // `values` object comes directly from VeeValidate
       body: JSON.stringify({
-        name: values.name,
+        firstName: values.firstName,
+        lastName: values.lastName,
         phoneNumber: values.phoneNumber,
         email: values.email,
         password: values.password,
@@ -153,17 +158,29 @@ const handleSignup = async (values: any) => {
         <div class="space-y-4 rounded-md">
           <!-- Full Name -->
           <div>
-            <label for="full-name" class="sr-only">Full name</label>
+            <label for="first-name" class="sr-only">First name</label>
             <Field
-              id="full-name"
-              name="name"
+              id="first-name"
+              name="firstName"
               type="text"
-              :class="{ 'border-red-500': errors.name }"
+              :class="{ 'border-red-500': errors.firstName }"
               class="relative block w-full px-3 py-3 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Full name"
-              @input=""
+              placeholder="First name"
             />
-            <ErrorMessage name="name" class="text-red-500 text-xs mt-1" />
+            <ErrorMessage name="firstName" class="text-red-500 text-xs mt-1" />
+          </div>
+
+          <div>
+            <label for="last-name" class="sr-only">Last name</label>
+            <Field
+              id="last-name"
+              name="lastName"
+              type="text"
+              :class="{ 'border-red-500': errors.lastName }"
+              class="relative block w-full px-3 py-3 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              placeholder="Last name"
+            />
+            <ErrorMessage name="lastName" class="text-red-500 text-xs mt-1" />
           </div>
           <!-- Phone Number -->
           <div>
@@ -176,6 +193,7 @@ const handleSignup = async (values: any) => {
               class="relative block w-full px-3 py-3 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               placeholder="Phone number"
             />
+            <p class="text-xs">Te enviaremos un SMS para verificar tu identidad.</p>
             <ErrorMessage name="phoneNumber" class="text-red-500 text-xs mt-1" />
           </div>
           <!-- Email -->

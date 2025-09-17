@@ -1,0 +1,9 @@
+{
+  "driver.mainScreen.welcome.title": "Bienvenido",
+  "user.mainScreen.greeting": "Hola",
+  "app.name": "TaxiGo",
+  "login": "Entrar",
+  "signup": "Registrarse",
+  "homepage.cta.title": "Viajes rápidos y seguros con nuestra app",
+  "homepage.cta.subtitle": "Viaja seguro, llega tranquilo y a un solo toque"
+}

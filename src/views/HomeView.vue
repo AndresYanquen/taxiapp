@@ -15,21 +15,21 @@ const toggleMobileMenu = () => {
     <header class="bg-white shadow-sm sticky top-0 z-50">
       <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
         <RouterLink to="/" class="text-2xl font-bold text-gray-900">
-          <i class="fa-solid fa-car-side text-blue-600"></i> SwiftRide
+          <i class="fa-solid fa-car-side text-blue-600"></i> {{ $t('app.name') }}
         </RouterLink>
 
-        <div class="hidden md:flex items-center space-x-4">
+        <div class="md:flex items-center space-x-4">
           <RouterLink
             to="/login"
             class="text-gray-600 font-semibold px-5 py-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
-            Login
+            {{ $t('login') }}
           </RouterLink>
           <RouterLink
             to="/signup"
             class="bg-blue-600 text-white font-semibold px-5 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Sign Up
+            {{ $t('signup') }}
           </RouterLink>
         </div>
         <button @click="toggleMobileMenu" class="md:hidden text-2xl text-gray-700">
@@ -78,12 +78,12 @@ const toggleMobileMenu = () => {
         <div class="container mx-auto px-6 py-24 md:py-32 flex flex-col md:flex-row items-center">
           <div class="md:w-1/2 text-center md:text-left mb-12 md:mb-0">
             <h1 class="text-4xl md:text-6xl font-extrabold leading-tight mb-4">
-              Fast, Reliable Rides in Medellín.
+              {{ $t('homepage.cta.title') }}
             </h1>
             <p class="text-lg md:text-xl text-gray-300 mb-8">
-              Get where you need to go with SwiftRide. Safe, affordable, and just a tap away.
+              {{ $t('homepage.cta.subtitle') }}
             </p>
-            <div
+            <!--             <div
               class="flex flex-col sm:flex-row justify-center md:justify-start space-y-4 sm:space-y-0 sm:space-x-4"
             >
               <a
@@ -98,7 +98,7 @@ const toggleMobileMenu = () => {
               >
                 <i class="fab fa-google-play mr-3 text-2xl"></i> Google Play
               </a>
-            </div>
+            </div> -->
           </div>
           <div class="md:w-1/2 flex justify-center">
             <img

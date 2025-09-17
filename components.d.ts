@@ -8,11 +8,9 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    Menubar: typeof import('primevue/menubar')['default']
-    NavBarMap: typeof import('./src/components/NavBarMap.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    Toast: typeof import('primevue/toast')['default']
+    SideMenu: typeof import('./src/components/Rider/SideMenu.vue')['default']
     TripHistory: typeof import('./src/components/TripHistory.vue')['default']
   }
 }
