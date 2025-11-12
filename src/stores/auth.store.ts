@@ -57,8 +57,11 @@ export const useAuthStore = defineStore('auth', () => {
       }
     } catch (error) {
       console.error('Login failed:', error)
-      // You can throw the error to be caught in the component for UI updates
-      throw error
+      const normalizedError =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        'Ocurrió un error al iniciar sesión. Por favor, inténtalo de nuevo.'
+      throw { error: normalizedError }
     }
   }
 

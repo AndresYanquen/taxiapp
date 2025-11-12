@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { Form, Field, ErrorMessage, configure } from 'vee-validate'
 import { useAuthStore } from '@/stores/auth.store'
 import * as yup from 'yup'
@@ -107,153 +107,198 @@ const handleSignup = async (values: any) => {
 </script>
 
 <template>
-  <div class="flex items-center justify-center min-h-screen bg-gray-50 py-12">
-    <div class="w-full max-w-md p-8 space-y-8 bg-white rounded-2xl shadow-xl">
-      <div class="text-center">
-        <a href="#" class="text-3xl font-bold text-gray-900">
-          <i class="fa-solid fa-car-side text-blue-600"></i> SwiftRide
-        </a>
-        <h2 class="mt-4 text-2xl font-bold text-gray-900">Create your account</h2>
-        <p class="mt-2 text-sm text-gray-600">
-          Join us and start riding or driving with SwiftRide.
-        </p>
+  <div class="min-h-screen bg-gray-950 text-gray-100 px-6 py-16 flex items-center justify-center">
+    <div class="w-full max-w-6xl grid gap-12 lg:grid-cols-2 items-start">
+      <div class="space-y-6 text-center lg:text-left">
+        <RouterLink to="/" class="inline-flex items-center text-3xl font-bold text-white">
+          <i class="fa-solid fa-car-side text-emerald-400 mr-3"></i>{{ $t('app.name') || 'SwiftRide' }}
+        </RouterLink>
+        <div class="space-y-4">
+          <h1 class="text-4xl font-black leading-tight">Create your SwiftRide account</h1>
+          <p class="text-gray-400 text-lg max-w-xl mx-auto lg:mx-0">
+            Join the SwiftRide community and unlock seamless transportation with real-time tracking,
+            trusted drivers, and a city-first experience designed for Medellín.
+          </p>
+        </div>
+        <div class="hidden lg:flex flex-col gap-5 text-sm text-gray-400">
+          <div class="flex items-center gap-4">
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+              <i class="fa-solid fa-bolt"></i>
+            </span>
+            Instant verification and onboarding for both riders and drivers
+          </div>
+          <div class="flex items-center gap-4">
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+              <i class="fa-solid fa-star"></i>
+            </span>
+            Keep your 5-star reputation with secure profiles and reviews
+          </div>
+        </div>
       </div>
 
-      <!-- Role Selector -->
-      <div class="flex p-1 bg-gray-200 rounded-lg">
-        <button
-          @click="role = 'user'"
-          :class="[
-            'w-1/2 py-2 text-sm font-semibold rounded-md transition-colors',
-            role === 'user' ? 'bg-white text-blue-600 shadow' : 'bg-transparent text-gray-600',
-          ]"
-        >
-          I'm a Rider
-        </button>
-        <button
-          @click="role = 'driver'"
-          :class="[
-            'w-1/2 py-2 text-sm font-semibold rounded-md transition-colors',
-            role === 'driver' ? 'bg-white text-blue-600 shadow' : 'bg-transparent text-gray-600',
-          ]"
-        >
-          I'm a Driver
-        </button>
-      </div>
-
-      <Form
-        class="mt-8 space-y-6"
-        @submit="handleSignup"
-        :validation-schema="schema"
-        v-slot="{ errors }"
-        validate-on-input
-      >
-        <div
-          v-if="errorMessage"
-          class="p-3 text-sm text-red-800 bg-red-100 border border-red-200 rounded-lg"
-        >
-          {{ errorMessage }}
+      <div class="bg-gray-900/60 border border-gray-800 rounded-3xl p-8 shadow-[0_25px_70px_-35px_rgba(16,185,129,0.45)] backdrop-blur">
+        <div class="text-center space-y-2">
+          <h2 class="text-2xl font-bold text-white">Choose how you ride</h2>
+          <p class="text-sm text-gray-400">Tell us who you are and we'll tailor the experience.</p>
         </div>
 
-        <div class="space-y-4 rounded-md">
-          <!-- Full Name -->
-          <div>
-            <label for="first-name" class="sr-only">First name</label>
-            <Field
-              id="first-name"
-              name="firstName"
-              type="text"
-              :class="{ 'border-red-500': errors.firstName }"
-              class="relative block w-full px-3 py-3 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="First name"
-            />
-            <ErrorMessage name="firstName" class="text-red-500 text-xs mt-1" />
-          </div>
-
-          <div>
-            <label for="last-name" class="sr-only">Last name</label>
-            <Field
-              id="last-name"
-              name="lastName"
-              type="text"
-              :class="{ 'border-red-500': errors.lastName }"
-              class="relative block w-full px-3 py-3 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Last name"
-            />
-            <ErrorMessage name="lastName" class="text-red-500 text-xs mt-1" />
-          </div>
-          <!-- Phone Number -->
-          <div>
-            <label for="phone-number" class="sr-only">Phone number</label>
-            <Field
-              id="phone-number"
-              name="phoneNumber"
-              type="tel"
-              :class="{ 'border-red-500': errors.phoneNumber }"
-              class="relative block w-full px-3 py-3 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Phone number"
-            />
-            <p class="text-xs">Te enviaremos un SMS para verificar tu identidad.</p>
-            <ErrorMessage name="phoneNumber" class="text-red-500 text-xs mt-1" />
-          </div>
-          <!-- Email -->
-          <div>
-            <label for="email-address" class="sr-only">Email address</label>
-            <Field
-              id="email-address"
-              name="email"
-              type="email"
-              :class="{ 'border-red-500': errors.email }"
-              class="relative block w-full px-3 py-3 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Email address"
-            />
-            <ErrorMessage name="email" class="text-red-500 text-xs mt-1" />
-          </div>
-          <!-- Password -->
-          <div class="relative">
-            <label for="password" class="sr-only">Password</label>
-            <Field
-              id="password"
-              name="password"
-              :type="passwordFieldType"
-              :class="{ 'border-red-500': errors.password }"
-              class="relative block w-full px-3 py-3 pr-16 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Password"
-            />
-            <button
-              type="button"
-              aria-label="Toggle password visibility"
-              @click="togglePasswordVisibility"
-              class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700"
-            >
-              <!-- Better to use icons here, but text works too -->
-              <span v-if="isPasswordVisible">Hide</span>
-              <span v-else>Show</span>
-            </button>
-          </div>
-          <ErrorMessage name="password" class="text-red-500 text-xs mt-1" />
+        <div class="mt-6 grid grid-cols-2 gap-3 rounded-2xl border border-gray-800 bg-gray-900/80 p-2">
+          <button
+            @click="role = 'user'"
+            type="button"
+            :class="[
+              'rounded-xl px-4 py-3 text-sm font-semibold transition-colors',
+              role === 'user'
+                ? 'bg-emerald-500 text-gray-900 shadow-lg shadow-emerald-500/30'
+                : 'text-gray-400 hover:text-white'
+            ]"
+          >
+            I'm a Rider
+          </button>
+          <button
+            @click="role = 'driver'"
+            type="button"
+            :class="[
+              'rounded-xl px-4 py-3 text-sm font-semibold transition-colors',
+              role === 'driver'
+                ? 'bg-emerald-500 text-gray-900 shadow-lg shadow-emerald-500/30'
+                : 'text-gray-400 hover:text-white'
+            ]"
+          >
+            I'm a Driver
+          </button>
         </div>
 
-        <div>
+        <Form
+          class="mt-8 space-y-6"
+          @submit="handleSignup"
+          :validation-schema="schema"
+          v-slot="{ errors }"
+          validate-on-input
+        >
+          <div
+            v-if="errorMessage"
+            class="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+          >
+            {{ errorMessage }}
+          </div>
+
+          <div class="space-y-5">
+            <div>
+              <label for="first-name" class="sr-only">First name</label>
+              <Field
+                id="first-name"
+                name="firstName"
+                type="text"
+                :class="[
+                  'block w-full rounded-2xl border bg-gray-900 px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2',
+                  errors.firstName
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
+                    : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
+                ]"
+                placeholder="First name"
+              />
+              <ErrorMessage name="firstName" class="mt-1 text-xs text-red-300" />
+            </div>
+
+            <div>
+              <label for="last-name" class="sr-only">Last name</label>
+              <Field
+                id="last-name"
+                name="lastName"
+                type="text"
+                :class="[
+                  'block w-full rounded-2xl border bg-gray-900 px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2',
+                  errors.lastName
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
+                    : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
+                ]"
+                placeholder="Last name"
+              />
+              <ErrorMessage name="lastName" class="mt-1 text-xs text-red-300" />
+            </div>
+
+            <div>
+              <label for="phone-number" class="sr-only">Phone number</label>
+              <Field
+                id="phone-number"
+                name="phoneNumber"
+                type="tel"
+                :class="[
+                  'block w-full rounded-2xl border bg-gray-900 px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2',
+                  errors.phoneNumber
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
+                    : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
+                ]"
+                placeholder="Phone number"
+              />
+              <p class="mt-1 text-xs text-gray-500">Te enviaremos un SMS para verificar tu identidad.</p>
+              <ErrorMessage name="phoneNumber" class="mt-1 text-xs text-red-300" />
+            </div>
+
+            <div>
+              <label for="email-address" class="sr-only">Email address</label>
+              <Field
+                id="email-address"
+                name="email"
+                type="email"
+                :class="[
+                  'block w-full rounded-2xl border bg-gray-900 px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2',
+                  errors.email
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
+                    : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
+                ]"
+                placeholder="Email address"
+              />
+              <ErrorMessage name="email" class="mt-1 text-xs text-red-300" />
+            </div>
+
+            <div class="relative">
+              <label for="password" class="sr-only">Password</label>
+              <Field
+                id="password"
+                name="password"
+                :type="passwordFieldType"
+                :class="[
+                  'block w-full rounded-2xl border bg-gray-900 px-4 py-3 pr-16 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2',
+                  errors.password
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
+                    : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
+                ]"
+                placeholder="Password"
+              />
+              <button
+                type="button"
+                aria-label="Toggle password visibility"
+                @click="togglePasswordVisibility"
+                class="absolute inset-y-0 right-0 flex items-center px-4 text-sm font-semibold text-gray-400 transition hover:text-white"
+              >
+                <span v-if="isPasswordVisible">Hide</span>
+                <span v-else>Show</span>
+              </button>
+              <ErrorMessage name="password" class="mt-1 text-xs text-red-300" />
+            </div>
+          </div>
+
           <button
             type="submit"
             :disabled="isLoading"
-            class="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md group hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed"
+            class="flex w-full items-center justify-center gap-3 rounded-2xl border border-transparent bg-emerald-500 px-6 py-3 font-semibold uppercase tracking-wide text-gray-900 transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-gray-950 disabled:cursor-not-allowed disabled:bg-emerald-500/60"
           >
-            <span v-if="isLoading" class="animate-spin mr-2">
+            <span v-if="isLoading" class="animate-spin text-gray-900">
               <i class="fa-solid fa-spinner"></i>
             </span>
             {{ isLoading ? 'Creating Account...' : 'Create Account' }}
           </button>
-        </div>
-      </Form>
+        </Form>
 
-      <p class="mt-6 text-sm text-center text-gray-600">
-        Already have an account?
-        <router-link to="/login" class="font-medium text-blue-600 hover:text-blue-500">
-          Sign in
-        </router-link>
-      </p>
+        <p class="mt-8 text-center text-sm text-gray-400">
+          Already have an account?
+          <RouterLink to="/login" class="font-semibold text-emerald-400 hover:text-emerald-300">
+            Sign in
+          </RouterLink>
+        </p>
+      </div>
     </div>
   </div>
 </template>

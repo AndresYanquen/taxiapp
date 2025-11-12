@@ -29,11 +29,39 @@ const authStore = useAuthStore()
 const router = useRouter()
 let locationInterval: number | null = null
 
+let appStateRemove: (() => void) | null = null
+let webBeforeUnloadHandler: (() => void) | null = null
+let webVisibilityHandler: (() => void) | null = null
+
 // --- Leaflet Custom Icons ---
 const createDivIcon = (content: string, className: string) =>
   L.divIcon({ html: content, className, iconSize: [30, 30], iconAnchor: [15, 30] })
 const driverIcon = createDivIcon('🚗', 'custom-icon custom-icon-driver')
 const riderIcon = createDivIcon('🧍', 'custom-icon custom-icon-rider')
+
+const goOfflineReliably = async () => {
+  try {
+    console.log('Running reliable offline task...')
+    await axios.patch(
+      `${import.meta.env.VITE_BACKEND_URL}/api/drivers/availability`,
+      { isAvailable: false },
+      { headers: { Authorization: `Bearer ${authStore.authToken}` } },
+    )
+    console.log('✅ Driver set to offline.')
+  } catch (error) {
+    console.error('Reliable offline task failed:', error)
+
+    // Fallback: sendBeacon when the page/tab is closing or hidden (web only)
+    if ('sendBeacon' in navigator) {
+      // NOTE: sendBeacon cannot set headers. Use same-origin cookies,
+      // or expose a beacon-friendly endpoint that doesn't require auth headers.
+      const url = `${import.meta.env.VITE_BACKEND_URL}/api/drivers/availability`
+      const blob = new Blob([JSON.stringify({ isAvailable: false })], { type: 'application/json' })
+      navigator.sendBeacon(url, blob)
+      console.log('📡 Sent offline status via sendBeacon.')
+    }
+  }
+}
 
 const sendLocationUpdate = async () => {
   try {
@@ -75,38 +103,28 @@ onMounted(async () => {
   await locateUserAndInitMap()
   setupSocketListeners()
   fetchDriverState()
-  App.addListener('appStateChange', async (state) => {
-    if (!state.isActive) {
-      // The app is no longer active. Run our reliable cleanup task.
-      await goOfflineReliably()
+
+  if (Capacitor.getPlatform() !== 'web') {
+    const listener = App.addListener('appStateChange', async (state) => {
+      if (!state.isActive) {
+        //await goOfflineReliably()
+      }
+    })
+  } else {
+    // WEB: when tab is closing or hidden
+    webBeforeUnloadHandler = () => {
+      //void goOfflineReliably()
     }
-  })
-})
+    webVisibilityHandler = () => {
+      if (document.visibilityState === 'hidden') {
+        //void goOfflineReliably()
+      }
+    }
 
-const goOfflineReliably = async () => {
-  // First, request a background task ID from the OS
-  const taskId = await BackgroundTask.beforeExit(async () => {
-    // This callback will run if the task takes too long,
-    // so we must finish the task here as well.
-    BackgroundTask.finish({ taskId })
-  })
-
-  try {
-    console.log('Running reliable offline task in background...')
-    // Use your original, authenticated endpoint. This is more secure.
-    await axios.patch(
-      `${import.meta.env.VITE_BACKEND_URL}/api/drivers/availability`,
-      { isAvailable: false },
-      { headers: { Authorization: `Bearer ${authStore.authToken}` } },
-    )
-    console.log('✅ Driver set to offline reliably.')
-  } catch (error) {
-    console.error('Reliable offline task failed:', error)
-  } finally {
-    // IMPORTANT: Always finish the task to release the OS lock
-    BackgroundTask.finish({ taskId })
+    window.addEventListener('beforeunload', webBeforeUnloadHandler)
+    document.addEventListener('visibilitychange', webVisibilityHandler)
   }
-}
+})
 
 onUnmounted(() => {
   if (socket) socket.disconnect()
@@ -115,12 +133,19 @@ onUnmounted(() => {
   const url = `${import.meta.env.VITE_BACKEND_URL}/api/drivers/go-offline`
   const driverId = authStore.user?.id
 
-  App.addListener('appStateChange', async (state) => {
-    if (!state.isActive) {
-      // The app is no longer active. Run our reliable cleanup task.
-      await goOfflineReliably()
-    }
-  })
+  // Clean up listeners
+  if (appStateRemove) {
+    appStateRemove()
+    appStateRemove = null
+  }
+  if (webBeforeUnloadHandler) {
+    window.removeEventListener('beforeunload', webBeforeUnloadHandler)
+    webBeforeUnloadHandler = null
+  }
+  if (webVisibilityHandler) {
+    document.removeEventListener('visibilitychange', webVisibilityHandler)
+    webVisibilityHandler = null
+  }
 })
 
 const testOffline = () => {
@@ -192,7 +217,7 @@ const setupSocketListeners = () => {
 
       if (updatedTrip.status === 'CANCELLED') {
         isAvailable.value = true
-        alert('The rider has cancelled the trip.')
+        alert('El usuario canceló el viaje.')
         activeTrip.value = null // Clear the active trip
         if (riderMarker.value && map.value) {
           map.value.removeLayer(riderMarker.value)
@@ -240,7 +265,7 @@ const locateUserAndInitMap = async () => {
 const initMap = (initialPosition: LatLng) => {
   if (!mapContainer.value) return
   map.value = L.map(mapContainer.value).setView(initialPosition, 19)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     maxZoom: 19,
   }).addTo(map.value)
@@ -291,7 +316,9 @@ const toggleAvailability = async () => {
       tripRequests.value = []
     }
   } catch (error: any) {
-    alert(error.response?.data?.error || 'Could not update availability.')
+    const backendError = error?.response?.data?.error || error?.response?.data?.message
+    alert(backendError || 'Could not update availability.')
+    console.log(backendError)
   } finally {
     isLoadingAvailability.value = false
   }
@@ -313,8 +340,9 @@ const acceptTrip = async (tripId: string) => {
       socket.emit('joinRideRoom', tripId)
     }
     updateMapForActiveTrip()
-  } catch (error) {
-    alert('Could not accept trip. It may have been taken by another driver.')
+  } catch (error: any) {
+    const backendError = error?.response?.data?.error || error?.response?.data?.message
+    alert(backendError || 'Could not accept trip. It may have been taken by another driver.')
     tripRequests.value = tripRequests.value.filter((trip) => trip._id !== tripId)
   }
 }
@@ -338,8 +366,9 @@ const handleTripAction = async (action: 'start' | 'complete') => {
       }
       map.value?.setView(driverMarker.value!.getLatLng(), 13)
     }
-  } catch (error) {
-    alert(`Could not ${action} the trip.`)
+  } catch (error: any) {
+    const backendError = error?.response?.data?.error || error?.response?.data?.message
+    alert(backendError || `Could not ${action} the trip.`)
   }
 }
 
@@ -364,117 +393,190 @@ const updateMapForActiveTrip = () => {
 </script>
 
 <template>
-  <div class="relative w-screen h-screen flex">
-    <div ref="mapContainer" class="h-full flex-grow"></div>
+  <div id="driver-app-wrapper">
+    <div id="driver-map" ref="mapContainer"></div>
 
-    <div
-      class="absolute top-0 left-0 bottom-0 z-[1000] w-full max-w-sm bg-white shadow-lg p-4 flex flex-col overflow-y-auto"
-    >
-      <div class="pb-4 border-b">
-        <h1 class="text-2xl font-bold">
-          {{ $t('driver.mainScreen.welcome.title') }}
-        </h1>
-        <p class="text-gray-500">{{ $t('user.mainScreen.greeting') }}, Driver!</p>
-      </div>
-
-      <div class="py-4 border-b flex items-center justify-between">
-        <button @click="testOffline" class="bg-yellow-400 p-2 rounded-lg">Test Go Offline</button>
-        <span class="font-semibold text-lg">Go Online</span>
-        <button
-          @click="toggleAvailability"
-          :disabled="isLoadingAvailability || !!activeTrip"
-          :class="[
-            'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-            isAvailable ? 'bg-green-600' : 'bg-gray-300',
-          ]"
+    <div class="driver-ui absolute top-6 left-1/2 z-30 w-full max-w-lg -translate-x-1/2 px-6">
+      <transition name="fade">
+        <div
+          v-if="statusMessage"
+          class="flex items-center gap-3 rounded-3xl border border-white/15 bg-gray-900/80 px-5 py-4 text-white shadow-2xl backdrop-blur"
         >
           <span
-            :class="[
-              'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-              isAvailable ? 'translate-x-5' : 'translate-x-0',
-            ]"
-          ></span>
-        </button>
-      </div>
+            class="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300"
+          >
+            <i class="pi pi-sparkles text-xl"></i>
+          </span>
+          <div>
+            <p class="text-[11px] uppercase tracking-[0.35em] text-emerald-200">Estado</p>
+            <p class="text-sm font-semibold text-white">{{ statusMessage }}</p>
+          </div>
+        </div>
+      </transition>
+    </div>
 
-      <div class="flex-grow pt-4">
-        <div v-if="activeTrip && activeTrip.status !== 'COMPLETED'">
-          <h2 class="text-xl font-bold text-blue-600 mb-2">Active Trip</h2>
-          <div class="p-3 bg-blue-50 rounded-lg space-y-1">
-            <p>
-              <strong>Status:</strong>
-              <span class="font-semibold">{{ activeTrip.status }}</span>
+    <div
+      class="driver-card-wrapper pointer-events-none absolute bottom-6 left-0 z-30 w-full px-4 sm:px-6"
+    >
+      <div
+        class="pointer-events-auto mx-auto w-full max-w-md rounded-[32px] border border-white/10 bg-[#0E141B]/90 p-5 text-white shadow-[0_35px_90px_-45px_rgba(0,0,0,0.9)] backdrop-blur-lg sm:max-w-lg sm:p-6"
+      >
+        <header class="flex items-center justify-between">
+          <div>
+            <p class="text-[11px] uppercase tracking-[0.4em] text-cyan-200">SwiftX</p>
+            <h2 class="text-3xl font-semibold">
+              {{ activeTrip ? 'En ruta' : isAvailable ? 'Disponible' : 'Offline' }}
+            </h2>
+            <p class="text-xs text-gray-400">
+              {{
+                activeTrip ? 'Sigue la ruta y completa el viaje.' : 'Administra tu disponibilidad.'
+              }}
             </p>
-            <p><strong>Pickup:</strong> {{ activeTrip.pickupName }}</p>
-            <p><strong>Destination:</strong> {{ activeTrip.destinationName }}</p>
-            <div v-if="activeTrip.userIndications" class="pt-1">
-              <p><strong>Indications:</strong> {{ activeTrip.userIndications }}</p>
+          </div>
+          <button
+            @click="toggleAvailability"
+            :disabled="isLoadingAvailability || !!activeTrip"
+            :class="[
+              'flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition',
+              isAvailable
+                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-200'
+                : 'border-white/10 bg-white/5 text-gray-200',
+              (isLoadingAvailability || !!activeTrip) && 'opacity-50 cursor-not-allowed',
+            ]"
+          >
+            <span
+              class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[10px] text-white"
+            >
+              <i :class="isAvailable ? 'pi pi-check' : 'pi pi-power-off'"></i>
+            </span>
+            {{ isAvailable ? 'Online' : 'Offline' }}
+          </button>
+        </header>
+
+        <div class="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
+          <template v-if="activeTrip && activeTrip.status !== 'COMPLETED'">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 text-sm text-gray-300">
+                <i class="pi pi-map-marker text-emerald-300"></i>
+                <span>{{ activeTrip.pickupName.split(',')[0] }}</span>
+              </div>
+              <span class="rounded-full bg-white/10 px-3 py-1 text-xs text-gray-200">{{
+                activeTrip.status
+              }}</span>
             </div>
-            <div class="mt-4 flex flex-col space-y-2">
+            <div class="mt-4 space-y-3 text-sm text-gray-200">
+              <p><span class="text-gray-400">Recogida:</span> {{ activeTrip.pickupName }}</p>
+              <p><span class="text-gray-400">Destino:</span> {{ activeTrip.destinationName }}</p>
+              <p v-if="activeTrip.userIndications">
+                <span class="text-gray-400">Indicaciones:</span> {{ activeTrip.userIndications }}
+              </p>
+            </div>
+            <div class="mt-5 grid gap-3 sm:grid-cols-2">
               <button
                 v-if="activeTrip.status === 'ACCEPTED'"
                 @click="handleTripAction('start')"
-                class="w-full bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600"
+                class="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-gray-900 transition hover:bg-emerald-400"
               >
-                Start Trip
+                Iniciar viaje
               </button>
               <button
                 v-if="activeTrip.status === 'IN_PROGRESS'"
                 @click="handleTripAction('complete')"
-                class="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600"
+                class="rounded-2xl border border-white/20 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-white transition hover:border-white/40"
               >
-                Complete Trip
+                Completar viaje
               </button>
             </div>
-          </div>
-        </div>
+          </template>
 
-        <div v-else-if="isAvailable">
-          <h2 class="text-xl font-bold text-gray-800 mb-2">Incoming Requests</h2>
-          <div v-if="tripRequests.length === 0" class="text-center text-gray-500 pt-8">
-            <p>Waiting for new ride requests...</p>
-          </div>
-          <ul v-else class="space-y-3">
-            <li
-              v-for="trip in tripRequests"
-              :key="trip._id"
-              class="p-3 bg-gray-100 rounded-lg shadow-sm"
-            >
-              <div class="space-y-1 text-sm">
-                <p><strong>From:</strong> {{ trip.pickupName }}</p>
-                <p><strong>To:</strong> {{ trip.destinationName }}</p>
-                <p v-if="trip.userIndications" class="pt-1">
-                  <strong>Indications:</strong> {{ trip.userIndications }}
-                </p>
+          <template v-else-if="isAvailable">
+            <div class="flex items-center justify-between">
+              <div class="text-sm">
+                <p class="text-[11px] uppercase tracking-[0.4em] text-cyan-200">Solicitudes</p>
+                <h3 class="text-xl font-semibold text-white">Viajes cercanos</h3>
               </div>
-              <button
-                @click="acceptTrip(trip._id)"
-                class="mt-2 w-full bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600"
+              <span class="rounded-full bg-white/10 px-3 py-1 text-xs text-gray-200"
+                >{{ tripRequests.length }} en cola</span
               >
-                Accept Ride
-              </button>
-            </li>
-          </ul>
+            </div>
+            <div v-if="tripRequests.length === 0" class="mt-4 text-sm text-gray-400">
+              Esperando nuevas solicitudes cerca de ti...
+            </div>
+            <ul v-else class="mt-4 space-y-3">
+              <li
+                v-for="trip in tripRequests"
+                :key="trip._id"
+                class="space-y-2 rounded-2xl border border-white/10 bg-[#111826] p-4"
+              >
+                <div class="text-lg font-semibold text-white">
+                  {{ trip.pickupName.split(',')[0] }}
+                </div>
+                <div class="flex items-center gap-2 text-sm text-gray-300">
+                  <i class="pi pi-arrow-right text-xs"></i>
+                  <span>{{ trip.destinationName }}</span>
+                </div>
+                <p v-if="trip.userIndications" class="text-xs text-gray-400">
+                  {{ trip.userIndications }}
+                </p>
+                <button
+                  @click="acceptTrip(trip._id)"
+                  class="mt-3 w-full rounded-2xl bg-[#3479FF] px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-[#5c91ff]"
+                >
+                  Aceptar
+                </button>
+              </li>
+            </ul>
+          </template>
+
+          <template v-else>
+            <div class="text-center text-sm text-gray-300">
+              Estás desconectado. Activa tu disponibilidad para recibir viajes.
+            </div>
+          </template>
         </div>
 
-        <div v-else class="text-center text-gray-500 pt-8">
-          <p>You are currently offline. Go online to receive ride requests.</p>
-        </div>
-      </div>
-
-      <div class="pt-4 mt-auto border-t">
-        <button
-          @click="authStore.logout()"
-          class="w-full text-red-500 font-semibold hover:text-red-700"
-        >
-          Log Out
-        </button>
+        <footer class="mt-4 flex items-center justify-between text-xs text-gray-400">
+          <div>
+            <p class="uppercase tracking-wide text-[10px]">Cuenta</p>
+            <p class="text-sm text-white font-semibold">{{ authStore.user?.name || 'Driver' }}</p>
+          </div>
+          <div class="flex gap-2">
+            <button
+              class="rounded-full border border-white/15 px-3 py-1 text-[11px] uppercase tracking-wide text-gray-200 hover:border-emerald-400"
+              @click="testOffline"
+            >
+              Test
+            </button>
+            <button
+              class="rounded-full border border-red-400/50 px-3 py-1 text-[11px] uppercase tracking-wide text-red-300 hover:border-red-300 hover:text-red-200"
+              @click="authStore.logout()"
+            >
+              Log Out
+            </button>
+          </div>
+        </footer>
       </div>
     </div>
   </div>
 </template>
 
 <style>
+#driver-app-wrapper {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+#driver-map {
+  width: 100%;
+  height: 100%;
+}
+.driver-ui {
+  z-index: 1100;
+}
+.driver-card-wrapper {
+  z-index: 1000;
+}
 .custom-icon {
   display: flex;
   justify-content: center;

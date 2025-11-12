@@ -7,6 +7,7 @@ import { createI18n } from 'vue-i18n'
 import 'leaflet/dist/leaflet.css'
 import PrimeVue from 'primevue/config'
 import Aura from '@primeuix/themes/aura'
+import 'primeicons/primeicons.css'
 
 import App from './App.vue'
 import router from './router'

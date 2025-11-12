@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import L from 'leaflet'
 import axios from 'axios'
 import { io, Socket } from 'socket.io-client'
@@ -36,7 +36,140 @@ const pickupAddress = ref('Getting current location...')
 const destinationAddress = ref('')
 const isRequesting = ref(false)
 const userIndications = ref('') // <-- ADDED: For additional user instructions
-const selectedCarType = ref('')
+const selectedCarType = ref('standard')
+
+type CarOption = {
+  id: string
+  label: string
+  desc: string
+  eta: string
+  badge: string
+}
+
+const carOptions: CarOption[] = [
+  {
+    id: 'standard',
+    label: 'City',
+    desc: 'Rápido y económico',
+    eta: '2-4 min',
+    badge: '3 pax',
+  },
+  {
+    id: 'premium',
+    label: 'Comfort',
+    desc: 'Autos amplios y silenciosos',
+    eta: '5-7 min',
+    badge: 'Lujo',
+  },
+  {
+    id: 'xl',
+    label: 'XL',
+    desc: 'Ideal para grupos grandes',
+    eta: '6-9 min',
+    badge: '6 pax',
+  },
+]
+
+const stageLabels = ['Ubicación', 'Buscando', 'En camino']
+
+const activeStage = computed(() => {
+  if (['ACCEPTED', 'IN_PROGRESS'].includes(appState.value)) return 2
+  if (appState.value === 'REQUESTED') return 1
+  return 0
+})
+
+const selectedCarSummary = computed(() =>
+  carOptions.find((option) => option.id === selectedCarType.value),
+)
+
+const selectCarType = (type: string) => {
+  selectedCarType.value = type
+}
+
+const isCollapsed = ref(false)
+const isSheetMinimized = ref(false)
+const isPickupSelectionActive = ref(false)
+const showMapTooltip = ref(false)
+
+const isUpdatingMarkerFromMap = ref(false)
+
+const setMarkerAtMapCenter = () => {
+  if (!map.value || !riderMarker.value) return
+  const center = map.value.getCenter()
+  riderMarker.value.setLatLng(center)
+}
+
+const togglePanel = () => {
+  isCollapsed.value = !isCollapsed.value
+}
+
+const toggleSheetVisibility = () => {
+  isSheetMinimized.value = !isSheetMinimized.value
+  if (!isSheetMinimized.value) {
+    isCollapsed.value = false
+  }
+}
+
+const expandSheet = () => {
+  isSheetMinimized.value = false
+  isCollapsed.value = false
+}
+
+const startPickupSelectionFromMap = () => {
+  isPickupSelectionActive.value = true
+  isSheetMinimized.value = true
+  showMapTooltip.value = true
+  if (map.value && riderMarker.value) {
+    setMarkerAtMapCenter()
+    map.value.panTo(map.value.getCenter(), { animate: true })
+    riderMarker.value.openPopup()
+  }
+}
+
+const finalizePickupSelection = () => {
+  if (!map.value || !riderMarker.value) return
+  const center = map.value.getCenter()
+  riderMarker.value.setLatLng(center)
+  reverseGeocode(center)
+  riderMarker.value.openPopup()
+  isPickupSelectionActive.value = false
+  isSheetMinimized.value = false
+  showMapTooltip.value = false
+}
+
+const confirmPickupSelection = () => {
+  if (!isPickupSelectionActive.value) return
+  finalizePickupSelection()
+}
+
+const handleMapMoveDuringSelection = () => {
+  if (!isPickupSelectionActive.value || isUpdatingMarkerFromMap.value) return
+  isUpdatingMarkerFromMap.value = true
+  requestAnimationFrame(() => {
+    setMarkerAtMapCenter()
+    isUpdatingMarkerFromMap.value = false
+  })
+}
+
+const handleMapClickForPickup = () => {
+  if (!isPickupSelectionActive.value) return
+  finalizePickupSelection()
+}
+
+watch(
+  () => appState.value,
+  (state) => {
+    if (state !== 'idle') {
+      isSheetMinimized.value = false
+    }
+  },
+)
+
+watch(isPickupSelectionActive, (active) => {
+  if (riderMarker.value?.dragging) {
+    active ? riderMarker.value.dragging.disable() : riderMarker.value.dragging.enable()
+  }
+})
 
 let pollingInterval = null
 let pollingAttempts = 0
@@ -69,6 +202,10 @@ onMounted(() => {
 onUnmounted(() => {
   if (pollingInterval) {
     clearInterval(pollingInterval)
+  }
+  if (map.value) {
+    map.value.off('click', handleMapClickForPickup)
+    map.value.off('move', handleMapMoveDuringSelection)
   }
   if (socket) socket.disconnect()
 })
@@ -174,7 +311,7 @@ const updateUIFromState = (newState: AppState, driver: Driver | null) => {
     case 'IN_PROGRESS':
       // Check for the full driver object and its location
       if (driver && driver.location && riderMarker.value) {
-        statusMessage.value = `${driver.name} is on the way!`
+        statusMessage.value = `${driver.name ? driver.name : 'El conductor'} está en camino!`
 
         // Create LatLng from the GeoJSON coordinates
         const driverPosition = L.latLng(
@@ -261,7 +398,8 @@ const updateUIFromState = (newState: AppState, driver: Driver | null) => {
       assignedDriver.value = null
       destinationAddress.value = ''
       userIndications.value = ''
-      selectedCarType.value = ''
+      selectedCarType.value = 'standard'
+      isRequesting.value = false
       localStorage.removeItem('rideId')
       if (map.value && riderMarker.value) {
         map.value.setView(riderMarker.value.getLatLng(), 19)
@@ -342,10 +480,14 @@ const initMap = (initialPosition: LatLng) => {
     .bindPopup('Your pickup location')
     .openPopup()
 
+  map.value.on('click', handleMapClickForPickup)
+  map.value.on('move', handleMapMoveDuringSelection)
+
   // Update address when marker is dragged
   riderMarker.value.on('dragend', (event) => {
     const marker = event.target
     const position = marker.getLatLng()
+    isPickupSelectionActive.value = false
     reverseGeocode(position)
   })
 
@@ -528,185 +670,446 @@ const handleLogout = async () => {
   <div id="app-wrapper">
     <div id="map" ref="mapContainer"></div>
     <SideMenu></SideMenu>
-    <div class="ui-container absolute top-5 left-1/2 -translate-x-1/2 z-20 w-full max-w-sm px-4">
+
+    <transition name="fade">
+      <button
+        v-if="isPickupSelectionActive"
+        class="pointer-events-auto fixed bottom-32 left-1/2 z-[1400] -translate-x-1/2 rounded-full border border-white/20 bg-emerald-500 px-6 py-2 text-sm font-semibold uppercase tracking-wide text-gray-900 shadow-xl sm:bottom-36"
+        @click="confirmPickupSelection"
+      >
+        Confirmar ubicación
+      </button>
+    </transition>
+
+    <div
+      v-if="!showMapTooltip"
+      class="ui-container-tooltip absolute top-6 left-1/2 z-[1200] w-full max-w-lg -translate-x-1/2 px-6"
+    >
       <transition name="fade">
         <div
           v-if="statusMessage"
-          class="bg-white rounded-lg shadow-xl p-3 text-center text-gray-700 font-semibold"
+          class="flex items-center gap-3 rounded-3xl border border-white/15 bg-gray-900/80 px-5 py-4 text-white shadow-2xl backdrop-blur"
         >
-          <p>{{ statusMessage }}</p>
+          <span
+            class="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300"
+          >
+            <i class="pi pi-compass text-xl"></i>
+          </span>
+          <div>
+            <p class="text-[11px] uppercase tracking-[0.35em] text-emerald-200">Actualización</p>
+            <p class="text-sm font-semibold text-white">{{ statusMessage }}</p>
+          </div>
         </div>
       </transition>
     </div>
 
-    <div class="ui-container absolute bottom-10 left-0 w-full p-4 z-20">
-      <transition name="fade" mode="out-in">
+    <div
+      class="ui-container pointer-events-none absolute bottom-4 left-0 z-20 w-full px-3 sm:bottom-6 sm:px-4"
+    >
+      <transition name="fade">
         <div
-          v-if="appState === 'idle'"
-          key="idle"
-          class="relative bg-white rounded-xl shadow-2xl p-5 max-w-md mx-auto space-y-4"
+          v-if="!isSheetMinimized && !isPickupSelectionActive"
+          class="pointer-events-auto mx-auto flex w-full max-w-md flex-col space-y-4 rounded-[26px] border border-white/10 bg-gradient-to-br from-gray-900/95 via-gray-900/85 to-gray-900/70 p-4 shadow-[0_30px_80px_-45px_rgba(16,185,129,0.65)] backdrop-blur max-h-[80vh] sm:max-w-xl sm:space-y-5 sm:rounded-[32px] sm:p-6 sm:max-h-none"
         >
-          <div class="absolute top-4 right-4">
-            <router-link
-              to="/history"
-              class="px-2 rounded-full hover:bg-gray-100 transition-colors block"
-            >
-              History
-            </router-link>
-          </div>
-
-          <div>
-            <label for="pickup" class="block text-sm font-medium text-gray-700">Pick up from</label>
-            <input
-              type="text"
-              id="pickup"
-              v-model="pickupAddress"
-              placeholder="Drag marker to set pickup"
-              class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label for="destination" class="block text-sm font-medium text-gray-700"
-              >Where to?</label
-            >
-            <input
-              type="text"
-              id="destination"
-              v-model="destinationAddress"
-              placeholder="Enter destination address"
-              class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label for="indications" class="block text-sm font-medium text-gray-700"
-              >Indicaciones DIR recogida</label
-            >
-            <input
-              type="text"
-              id="indications"
-              v-model="userIndications"
-              placeholder="e.g., building with a red door"
-              class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
           <button
-            @click="requestRide"
-            :disabled="!destinationAddress || !!statusMessage || isRequesting"
-            class="w-full bg-black text-white font-bold py-3 px-12 rounded-lg shadow-lg hover:bg-gray-800 transition-transform transform hover:scale-105 disabled:bg-gray-500 disabled:cursor-not-allowed"
+            class="mx-auto flex h-8 w-14 items-center justify-center rounded-full bg-white/10 sm:hidden"
+            @click="toggleSheetVisibility"
           >
-            {{ isRequesting ? 'Buscando conductor...' : 'Solicitar Viaje' }}
+            <span class="h-1.5 w-8 rounded-full bg-white/40"></span>
           </button>
-        </div>
-        <div
-          v-else-if="appState === 'REQUESTED'"
-          key="requested"
-          class="bg-white rounded-xl shadow-2xl p-5 max-w-md mx-auto text-center"
-        >
-          <h2 class="text-xl font-bold text-gray-800">Buscando tu viaje...</h2>
-          <p class="text-gray-500 mt-2 mb-6">Estamos buscando el conductor más cercano.</p>
 
-          <div class="flex justify-center my-4">
-            <svg
-              class="animate-spin -ml-1 mr-3 h-8 w-8 text-black"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                class="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                stroke-width="4"
-              ></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
-          </div>
-
-          <button
-            @click="cancelRide"
-            class="w-full bg-red-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-red-600 transition"
-          >
-            Cancelar Búsqueda
-          </button>
-        </div>
-        <div
-          v-else-if="(appState === 'ACCEPTED' || appState === 'IN_PROGRESS') && assignedDriver"
-          key="in-progress"
-          class="relative bg-white rounded-xl shadow-2xl p-5 max-w-md mx-auto"
-        >
-          <div class="absolute top-4 right-4">
-            <router-link
-              to="/history"
-              class="p-2 rounded-full hover:bg-gray-100 transition-colors block"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6 text-gray-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                />
-              </svg>
-            </router-link>
-          </div>
-
-          <div class="flex items-center">
-            <div
-              class="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center text-white text-3xl mr-4 shrink-0"
-            >
-              🚗
-            </div>
-            <div>
-              <h2 class="font-bold text-lg text-gray-900">
-                {{ assignedDriver.name }} is on the way!
-              </h2>
-              <p v-if="assignedDriver.car" class="text-gray-600">
-                {{ assignedDriver.car.model }} - {{ assignedDriver.car.color }}
-              </p>
-              <p
-                v-if="assignedDriver.car"
-                class="font-semibold text-gray-800 bg-gray-100 inline-block px-2 py-1 rounded-md mt-1"
-              >
-                {{ assignedDriver.car.plate }}
+          <div v-if="isSheetMinimized && !isPickupSelectionActive" class="flex flex-wrap items-center justify-between gap-3">
+            <div class="space-y-1">
+              <p class="text-[11px] uppercase tracking-[0.35em] text-emerald-200">Planifica</p>
+              <h3 class="text-xl font-semibold leading-tight text-white">Planifica tu viaje</h3>
+              <p class="text-xs text-gray-400 sm:text-sm">
+                Selecciona tu punto de partida y destino para conectar con el conductor ideal.
               </p>
             </div>
+            <div class="flex items-center gap-2">
+              <RouterLink
+                to="/history"
+                class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:border-emerald-400 hover:text-white"
+              >
+                <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+                Historial
+              </RouterLink>
+              <button
+                type="button"
+                class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition hover:border-emerald-400 hover:text-emerald-300"
+                @click="togglePanel"
+              >
+                <i :class="isCollapsed ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></i>
+              </button>
+            </div>
           </div>
-          <button
-            @click="cancelRide"
-            class="w-full bg-red-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-red-600 transition mt-4"
-          >
-            Cancel Ride
-          </button>
+
+          <transition name="fade" mode="out-in">
+            <section
+              v-show="!isCollapsed"
+              class="space-y-4 overflow-auto pr-1 sm:space-y-5 sm:overflow-visible sm:pr-0"
+            >
+              <div v-if="isSheetMinimized && !isPickupSelectionActive" class="flex flex-wrap items-center gap-2 text-[11px]">
+                <template v-for="(label, index) in stageLabels" :key="label">
+                  <div class="flex items-center gap-2">
+                    <span
+                      :class="[
+                        'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold',
+                        index <= activeStage
+                          ? 'bg-emerald-400 text-gray-900'
+                          : 'bg-white/10 text-gray-500',
+                      ]"
+                    >
+                      {{ index + 1 }}
+                    </span>
+                    <span
+                      :class="[
+                        'font-semibold tracking-wide',
+                        index <= activeStage ? 'text-white' : 'text-gray-500',
+                      ]"
+                    >
+                      {{ label }}
+                    </span>
+                  </div>
+                  <div
+                    v-if="index < stageLabels.length - 1"
+                    class="hidden h-px flex-1 bg-white/10 sm:block"
+                  ></div>
+                </template>
+              </div>
+
+              <div
+                v-if="appState === 'idle'"
+                key="idle"
+                class="space-y-4 rounded-3xl border border-white/5 bg-black/10 p-4 sm:space-y-5"
+              >
+                <div class="space-y-3">
+                  <div
+                    class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 transition focus-within:border-emerald-400"
+                  >
+                    <div class="flex items-start gap-3">
+                      <div
+                        class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300"
+                      >
+                        <i class="pi pi-map-marker text-base"></i>
+                      </div>
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="text-[11px] uppercase tracking-wide text-gray-400">
+                            Punto de partida
+                          </p>
+                          <button
+                            type="button"
+                            class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:border-emerald-300 hover:text-white"
+                            @click="startPickupSelectionFromMap"
+                          >
+                            Desde mapa
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          id="pickup"
+                          v-model="pickupAddress"
+                          placeholder="Arrastra el marcador en el mapa"
+                          class="w-full border-none bg-transparent p-0 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-0 sm:text-sm"
+                        />
+                        <p class="mt-1 text-[10px] text-gray-500">
+                          Mueve el mapa con el marcador centrado para ajustar tu punto de partida.
+                        </p>
+                        <p
+                          v-if="isPickupSelectionActive"
+                          class="mt-1 text-[11px] font-semibold text-emerald-300"
+                        >
+                          Mantén el cursor en el centro y arrastra el mapa. Toca el mapa para
+                          confirmar.
+                        </p>
+                        <button
+                          v-if="isPickupSelectionActive"
+                          type="button"
+                          class="mt-3 inline-flex items-center justify-center rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200 hover:bg-emerald-400/30"
+                          @click="confirmPickupSelection"
+                        >
+                          Confirmar ubicación
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <div
+                      class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 transition focus-within:border-emerald-400"
+                    >
+                      <div class="flex items-start gap-3">
+                        <div
+                          class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-emerald-200"
+                        >
+                          <i class="pi pi-flag text-base"></i>
+                        </div>
+                        <div class="flex-1">
+                          <p class="text-[11px] uppercase tracking-wide text-gray-400">
+                            ¿Dónde te diriges?
+                          </p>
+                          <input
+                            type="text"
+                            id="destination"
+                            v-model="destinationAddress"
+                            placeholder="Introduce la dirección de destino"
+                            class="w-full border-none bg-transparent p-0 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-0 sm:text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 transition focus-within:border-emerald-400"
+                    >
+                      <div class="flex items-start gap-3">
+                        <div
+                          class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-emerald-200"
+                        >
+                          <i class="pi pi-comment text-base"></i>
+                        </div>
+                        <div class="flex-1">
+                          <div class="flex items-center justify-between">
+                            <p class="text-[11px] uppercase tracking-wide text-gray-400">
+                              Indicaciones
+                            </p>
+                            <span class="text-[10px] text-gray-500">Opcional</span>
+                          </div>
+                          <textarea
+                            id="indications"
+                            v-model="userIndications"
+                            rows="2"
+                            placeholder="p. ej. portería gris, apartamento 502"
+                            class="mt-1 w-full resize-none border-none bg-transparent p-0 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-0 sm:text-sm"
+                          ></textarea>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="space-y-3">
+                  <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    Preferencia de vehículo
+                  </p>
+                  <div class="grid gap-2 sm:grid-cols-3">
+                    <button
+                      v-for="option in carOptions"
+                      :key="option.id"
+                      type="button"
+                      @click="selectCarType(option.id)"
+                      :class="[
+                        'rounded-2xl border px-3 py-3 text-left text-xs transition',
+                        selectedCarType === option.id
+                          ? 'border-emerald-400 bg-emerald-500/10 text-white'
+                          : 'border-white/10 bg-white/5 text-gray-200 hover:border-emerald-300/60',
+                      ]"
+                    >
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-semibold">{{ option.label }}</span>
+                        <span
+                          class="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-gray-300"
+                        >
+                          {{ option.badge }}
+                        </span>
+                      </div>
+                      <p class="text-[11px] text-gray-400">{{ option.desc }}</p>
+                      <p class="text-[11px] font-semibold text-emerald-300">{{ option.eta }}</p>
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  @click="requestRide"
+                  :disabled="!destinationAddress || !!statusMessage || isRequesting"
+                  class="w-full rounded-2xl border border-transparent bg-gradient-to-r from-emerald-400 to-teal-400 px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-gray-900 transition hover:from-emerald-300 hover:to-teal-300 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-gray-950 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {{ isRequesting ? 'Buscando conductor...' : 'Solicitar viaje' }}
+                </button>
+              </div>
+
+              <div
+                v-else-if="appState === 'REQUESTED'"
+                key="requested"
+                class="space-y-4 rounded-3xl border border-white/5 bg-black/20 px-5 py-6 text-center sm:space-y-5"
+              >
+                <div class="space-y-3">
+                  <p class="text-xs uppercase tracking-[0.35em] text-emerald-200">Buscando</p>
+                  <h2 class="text-2xl font-black text-white">Encontrando el mejor conductor</h2>
+                  <p class="text-sm text-gray-300">
+                    Estamos verificando conductores cercanos a tu ubicación. Esto tarda solo unos
+                    segundos.
+                  </p>
+                </div>
+
+                <div class="flex justify-center">
+                  <svg
+                    class="h-12 w-12 animate-spin text-emerald-300"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-20"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    />
+                    <path
+                      class="opacity-90"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                </div>
+
+                <button
+                  @click="cancelRide"
+                  class="w-full rounded-2xl border border-transparent bg-red-500 px-6 py-3 text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-red-400 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 focus:ring-offset-gray-950"
+                >
+                  Cancelar búsqueda
+                </button>
+              </div>
+
+              <div
+                v-else-if="
+                  (appState === 'ACCEPTED' || appState === 'IN_PROGRESS') && assignedDriver
+                "
+                key="in-progress"
+                class="space-y-4 rounded-3xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-6 shadow-[0_30px_80px_-45px_rgba(16,185,129,0.75)] sm:space-y-5"
+              >
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <div
+                    class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl"
+                  >
+                    🚗
+                  </div>
+                  <div class="space-y-1">
+                    <p class="text-xs uppercase tracking-[0.35em] text-emerald-200">
+                      Conductor en camino
+                    </p>
+                    <h2 class="text-xl font-semibold text-white">
+                      {{ assignedDriver.name }} está en camino
+                    </h2>
+                    <p v-if="assignedDriver.car" class="text-sm text-emerald-50">
+                      {{ assignedDriver.car.model }} • {{ assignedDriver.car.color }}
+                    </p>
+                    <p
+                      v-if="assignedDriver.car"
+                      class="inline-flex items-center gap-2 rounded-xl border border-emerald-300/60 bg-white/10 px-4 py-1 text-sm font-semibold text-white"
+                    >
+                      {{ assignedDriver.car.plate }}
+                    </p>
+                  </div>
+                </div>
+
+                <p class="text-sm text-emerald-50">
+                  Sigue el mapa para conocer el progreso del conductor. Recibirás una notificación
+                  cuando esté en tu punto de partida.
+                </p>
+
+                <button
+                  @click="cancelRide"
+                  class="w-full rounded-2xl border border-white/30 bg-white/10 px-6 py-3 text-sm font-semibold uppercase tracking-wide text-white transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-emerald-500/30"
+                >
+                  Cancelar viaje
+                </button>
+              </div>
+            </section>
+          </transition>
         </div>
       </transition>
+
+      <button
+        v-if="!isSheetMinimized && !isPickupSelectionActive"
+        @click="toggleSheetVisibility"
+        class="pointer-events-auto mx-auto mt-3 flex h-9 w-24 items-center justify-center gap-2 rounded-full border border-white/15 bg-black/70 text-[11px] font-semibold uppercase tracking-wide text-white shadow-lg sm:hidden"
+      >
+        <i class="pi pi-chevron-down text-xs"></i>
+        Ocultar
+      </button>
+
+      <div
+        v-if="isSheetMinimized && !isPickupSelectionActive && !showMapTooltip"
+        class="pointer-events-auto mx-auto w-full max-w-sm rounded-full border border-white/15 bg-gray-900/85 px-4 py-3 text-white shadow-lg sm:hidden"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="text-[11px] uppercase tracking-wide text-gray-400">
+              {{ isPickupSelectionActive ? 'Selecciona en el mapa' : 'Destino' }}
+            </p>
+            <p class="text-sm font-semibold text-white">
+              {{
+                isPickupSelectionActive
+                  ? 'Arrastra o toca el mapa para fijar tu punto de partida'
+                  : destinationAddress || 'Añade destino'
+              }}
+            </p>
+          </div>
+          <button
+            @click="expandSheet"
+            class="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-200"
+          >
+            <i class="pi pi-chevron-up text-xs"></i>
+            Abrir
+          </button>
+        </div>
+        <p v-if="isPickupSelectionActive" class="mt-2 text-[11px] text-emerald-200">
+          Desplaza el marcador o toca el mapa para confirmar tu punto de partida.
+        </p>
+        <button
+          v-if="isPickupSelectionActive"
+          @click="confirmPickupSelection"
+          class="mt-3 w-full rounded-full bg-emerald-500/80 py-2 text-sm font-semibold uppercase tracking-wide text-gray-900"
+        >
+          Confirmar ubicación
+        </button>
+      </div>
     </div>
 
     <!-- LOCATION ERROR MODAL -->
     <transition name="fade">
       <div
         v-if="showModal"
-        class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[5000]"
+        class="fixed inset-0 z-[5000] flex items-center justify-center bg-black/60 p-4"
       >
-        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm text-center">
-          <h3 class="text-xl font-bold text-gray-800 mb-2">{{ modalTitle }}</h3>
+        <div class="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-2xl">
+          <h3 class="mb-2 text-xl font-bold text-gray-800">{{ modalTitle }}</h3>
 
-          <p class="text-gray-600 mb-6">{{ modalMessage }}</p>
+          <p class="mb-6 text-gray-600">{{ modalMessage }}</p>
 
           <button
             @click="showModal = false"
-            class="bg-black text-white font-bold py-3 px-8 rounded-lg w-full hover:bg-gray-800 transition"
+            class="w-full rounded-lg bg-black py-3 px-8 font-bold text-white transition hover:bg-gray-800"
+          >
+            Entendido
+          </button>
+        </div>
+      </div>
+    </transition>
+
+    <!-- MAP TOOLTIP -->
+    <transition name="fade">
+      <div
+        v-if="showMapTooltip"
+        class="pointer-events-none absolute inset-0 z-[1500] flex items-center justify-center px-6"
+      >
+        <div
+          class="pointer-events-auto max-w-xs rounded-2xl border border-white/20 bg-gray-900/90 p-4 text-center text-white shadow-2xl"
+        >
+          <p class="text-sm font-semibold uppercase tracking-wide text-emerald-300">
+            Selecciona tu punto
+          </p>
+          <p class="mt-1 text-xs text-gray-100">
+            Mantén el marcador en el centro, mueve el mapa hasta tu ubicación deseada y presiona
+            <span class="font-semibold text-emerald-300">Confirmar ubicación</span>.
+          </p>
+          <button
+            class="mt-3 w-full rounded-xl bg-emerald-500/80 py-2 text-sm font-semibold text-gray-900"
+            @click="showMapTooltip = false"
           >
             Entendido
           </button>
@@ -735,7 +1138,10 @@ html {
   z-index: 10;
 }
 .ui-container {
-  z-index: 1000;
+  z-index: 100;
+}
+.ui-container-tooltip {
+  z-index: 101;
 }
 .custom-icon {
   display: flex;
@@ -765,5 +1171,25 @@ html {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.collapse-enter-active,
+.collapse-leave-active {
+  transition:
+    max-height 0.25s ease,
+    opacity 0.2s ease,
+    padding 0.25s ease;
+}
+.collapse-enter-from,
+.collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  /* optional if you want tighter collapsed padding:
+     padding-top: 0; padding-bottom: 0; */
+}
+.collapse-enter-to,
+.collapse-leave-from {
+  max-height: 100px; /* sufficiently large */
+  opacity: 1;
 }
 </style>
