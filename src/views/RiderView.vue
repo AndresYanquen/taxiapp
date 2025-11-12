@@ -718,7 +718,10 @@ const handleLogout = async () => {
             <span class="h-1.5 w-8 rounded-full bg-white/40"></span>
           </button>
 
-          <div v-if="isSheetMinimized && !isPickupSelectionActive" class="flex flex-wrap items-center justify-between gap-3">
+          <div
+            v-if="isSheetMinimized && !isPickupSelectionActive"
+            class="flex flex-wrap items-center justify-between gap-3"
+          >
             <div class="space-y-1">
               <p class="text-[11px] uppercase tracking-[0.35em] text-emerald-200">Planifica</p>
               <h3 class="text-xl font-semibold leading-tight text-white">Planifica tu viaje</h3>
@@ -749,7 +752,10 @@ const handleLogout = async () => {
               v-show="!isCollapsed"
               class="space-y-4 overflow-auto pr-1 sm:space-y-5 sm:overflow-visible sm:pr-0"
             >
-              <div v-if="isSheetMinimized && !isPickupSelectionActive" class="flex flex-wrap items-center gap-2 text-[11px]">
+              <div
+                v-if="isSheetMinimized && !isPickupSelectionActive"
+                class="flex flex-wrap items-center gap-2 text-[11px]"
+              >
                 <template v-for="(label, index) in stageLabels" :key="label">
                   <div class="flex items-center gap-2">
                     <span
@@ -992,7 +998,7 @@ const handleLogout = async () => {
                       Conductor en camino
                     </p>
                     <h2 class="text-xl font-semibold text-white">
-                      {{ assignedDriver.name }} está en camino
+                      {{ assignedDriver.name ? assignedDriver.name : 'Conductor' }} está en camino
                     </h2>
                     <p v-if="assignedDriver.car" class="text-sm text-emerald-50">
                       {{ assignedDriver.car.model }} • {{ assignedDriver.car.color }}

@@ -10,7 +10,8 @@
     "build-only": "vite build",
     "build-netlify": "vue-tsc && vite build && echo '/* /index.html  200' > dist/_redirects",
     "type-check": "vue-tsc --build",
-    "format": "prettier --write src/"
+    "format": "prettier --write src/",
+    "build-nots": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.2",

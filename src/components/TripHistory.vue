@@ -12,7 +12,8 @@ const authStore = useAuthStore()
 const router = useRouter()
 
 // Function to format the date
-const formatDate = (dateString: string) => {
+const formatDate = (dateString?: string) => {
+  if (!dateString) return 'Fecha no disponible'
   return new Date(dateString).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
