@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
 import { useAuthStore } from '@/stores/auth.store'
 import { useRouter } from 'vue-router'
 import type { Trip } from '../types' // Make sure your Trip type is correctly defined
+import { useApi } from '@/composables/useApi'
 
 const trips = ref<Trip[]>([])
 const isLoading = ref(true)
 const errorMessage = ref('')
 const authStore = useAuthStore()
 const router = useRouter()
+const api = useApi()
 
 // Function to format the date
 const formatDate = (dateString?: string) => {
@@ -36,9 +37,7 @@ onMounted(async () => {
       : `${import.meta.env.VITE_BACKEND_URL}/api/trips/history/passenger`
 
   try {
-    const response = await axios.get(historyUrl, {
-      headers: { Authorization: `Bearer ${authStore.authToken}` },
-    })
+    const response = await api.get(historyUrl)
     trips.value = response.data
   } catch (error) {
     errorMessage.value = 'Could not load trip history. Please try again later.'

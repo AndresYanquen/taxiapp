@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import L from 'leaflet'
-import axios from 'axios'
 import { App } from '@capacitor/app'
 import { io, Socket } from 'socket.io-client'
 import type { Map as LeafletMap, LatLng, Marker } from 'leaflet'
@@ -10,6 +9,8 @@ import { useRouter } from 'vue-router'
 import type { Trip, Driver } from '../types'
 import { Capacitor } from '@capacitor/core'
 import { Geolocation } from '@capacitor/geolocation'
+import { useApi } from '@/composables/useApi'
+import { handleTokenExpiryIfNeeded } from '@/utils/tokenExpiration'
 
 // --- API and Socket Configuration ---
 let socket: Socket
@@ -27,6 +28,7 @@ const activeTrip = ref<Trip | null>(null)
 const tripRequests = ref<Trip[]>([])
 const authStore = useAuthStore()
 const router = useRouter()
+const api = useApi()
 let locationInterval: number | null = null
 
 let appStateRemove: (() => void) | null = null
@@ -42,11 +44,9 @@ const riderIcon = createDivIcon('🧍', 'custom-icon custom-icon-rider')
 const goOfflineReliably = async () => {
   try {
     console.log('Running reliable offline task...')
-    await axios.patch(
-      `${import.meta.env.VITE_BACKEND_URL}/api/drivers/availability`,
-      { isAvailable: false },
-      { headers: { Authorization: `Bearer ${authStore.authToken}` } },
-    )
+    await api.patch(`${import.meta.env.VITE_BACKEND_URL}/api/drivers/availability`, {
+      isAvailable: false,
+    })
     console.log('✅ Driver set to offline.')
   } catch (error) {
     console.error('Reliable offline task failed:', error)
@@ -172,6 +172,9 @@ const testOffline = () => {
       return response.json()
     })
     .then((data) => {
+      if (handleTokenExpiryIfNeeded(data)) {
+        return
+      }
       // This .then() receives the resolved promise from response.json()
       console.log('✅ Test successful. Server response data:', data)
     })
@@ -277,9 +280,7 @@ const initMap = (initialPosition: LatLng) => {
 const fetchDriverState = async () => {
   try {
     // Call the new endpoint to get the full driver state
-    const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/drivers/me`, {
-      headers: { Authorization: `Bearer ${authStore.authToken}` },
-    })
+    const res = await api.get(`${import.meta.env.VITE_BACKEND_URL}/api/drivers/me`)
 
     const { driver, activeTrip: trip } = res.data
 
@@ -306,11 +307,9 @@ const toggleAvailability = async () => {
   isLoadingAvailability.value = true
   try {
     const newAvailability = !isAvailable.value
-    await axios.patch(
-      `${import.meta.env.VITE_BACKEND_URL}/api/drivers/availability`,
-      { isAvailable: newAvailability },
-      { headers: { Authorization: `Bearer ${authStore.authToken}` } },
-    )
+    await api.patch(`${import.meta.env.VITE_BACKEND_URL}/api/drivers/availability`, {
+      isAvailable: newAvailability,
+    })
     isAvailable.value = newAvailability
     if (!newAvailability) {
       tripRequests.value = []
@@ -326,11 +325,7 @@ const toggleAvailability = async () => {
 
 const acceptTrip = async (tripId: string) => {
   try {
-    const res = await axios.post(
-      `${import.meta.env.VITE_BACKEND_URL}/api/trips/${tripId}/accept`,
-      {},
-      { headers: { Authorization: `Bearer ${authStore.authToken}` } },
-    )
+    const res = await api.post(`${import.meta.env.VITE_BACKEND_URL}/api/trips/${tripId}/accept`)
     activeTrip.value = res.data
     isAvailable.value = false
     tripRequests.value = []
@@ -350,10 +345,8 @@ const acceptTrip = async (tripId: string) => {
 const handleTripAction = async (action: 'start' | 'complete') => {
   if (!activeTrip.value) return
   try {
-    const res = await axios.post(
+    const res = await api.post(
       `${import.meta.env.VITE_BACKEND_URL}/api/trips/${activeTrip.value._id}/${action}`,
-      {},
-      { headers: { Authorization: `Bearer ${authStore.authToken}` } },
     )
     activeTrip.value = res.data
 

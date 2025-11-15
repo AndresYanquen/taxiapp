@@ -9,62 +9,56 @@ const visible = ref(false)
 const features = [
   {
     icon: 'fa-solid fa-route',
-    title: 'Door-to-Door Convenience',
-    description:
-      'Request a ride in seconds and get picked up by top-rated drivers wherever you are in the city.',
+    titleKey: 'landing.features.items.door.title',
+    descriptionKey: 'landing.features.items.door.description',
   },
   {
     icon: 'fa-solid fa-stopwatch',
-    title: 'Arrive On Time',
-    description:
-      'Smart dispatching, live GPS tracking, and traffic-aware routing get you to your destination faster.',
+    titleKey: 'landing.features.items.time.title',
+    descriptionKey: 'landing.features.items.time.description',
   },
   {
     icon: 'fa-solid fa-shield-heart',
-    title: 'Trusted & Secure',
-    description:
-      'Every trip is backed by 24/7 support, driver background checks, and shareable trip details.',
+    titleKey: 'landing.features.items.trust.title',
+    descriptionKey: 'landing.features.items.trust.description',
   },
 ]
 
 const steps = [
   {
     number: '01',
-    title: 'Set Your Pickup',
-    description: 'Enter your pickup point or let the app detect your location automatically.',
+    titleKey: 'landing.steps.items.pickup.title',
+    descriptionKey: 'landing.steps.items.pickup.description',
   },
   {
     number: '02',
-    title: 'Choose Your Ride',
-    description: 'Select the vehicle type that fits your style and budget before you confirm.',
+    titleKey: 'landing.steps.items.ride.title',
+    descriptionKey: 'landing.steps.items.ride.description',
   },
   {
     number: '03',
-    title: 'Track & Relax',
-    description:
-      'Follow your driver in real time, pay in-app, and rate the experience when you arrive.',
+    titleKey: 'landing.steps.items.track.title',
+    descriptionKey: 'landing.steps.items.track.description',
   },
 ]
 
 const testimonials = [
   {
-    quote:
-      '“The most reliable rideshare service I have used in Medellín. Drivers are friendly and the cars are spotless.”',
+    quoteKey: 'landing.testimonials.laura.quote',
     name: 'Laura G.',
-    role: 'Frequent Rider',
+    roleKey: 'landing.testimonials.laura.role',
   },
   {
-    quote:
-      '“I joined as a driver last year and the support team has been excellent. Earnings are transparent and weekly.”',
+    quoteKey: 'landing.testimonials.carlos.quote',
     name: 'Carlos R.',
-    role: 'Driver Partner',
+    roleKey: 'landing.testimonials.carlos.role',
   },
 ]
 
 const stats = [
-  { label: 'Cities Served', value: '25+' },
-  { label: 'Completed Trips', value: '4M+' },
-  { label: 'Average Rating', value: '4.9' },
+  { labelKey: 'landing.stats.cities', value: '25+' },
+  { labelKey: 'landing.stats.trips', value: '4M+' },
+  { labelKey: 'landing.stats.rating', value: '4.9' },
 ]
 
 const isMobileMenuOpen = ref(false)
@@ -83,10 +77,18 @@ const toggleMobileMenu = () => {
           <i class="fa-solid fa-car-side text-emerald-400 mr-2"></i>{{ $t('app.name') }}
         </RouterLink>
         <div class="hidden md:flex items-center space-x-8 text-sm font-semibold">
-          <a class="hover:text-white transition-colors" href="#rider">Ride</a>
-          <a class="hover:text-white transition-colors" href="#driver">Drive</a>
-          <a class="hover:text-white transition-colors" href="#features">Features</a>
-          <a class="hover:text-white transition-colors" href="#support">Support</a>
+          <a class="hover:text-white transition-colors" href="#rider">{{
+            $t('landing.nav.ride')
+          }}</a>
+          <a class="hover:text-white transition-colors" href="#driver">{{
+            $t('landing.nav.drive')
+          }}</a>
+          <a class="hover:text-white transition-colors" href="#features">{{
+            $t('landing.nav.features')
+          }}</a>
+          <a class="hover:text-white transition-colors" href="#support">{{
+            $t('landing.nav.support')
+          }}</a>
         </div>
         <div class="hidden md:flex items-center space-x-4">
           <RouterLink
@@ -106,7 +108,7 @@ const toggleMobileMenu = () => {
           <Button
             @click="toggleMobileMenu"
             class="text-2xl text-gray-300 focus:outline-none"
-            aria-label="Toggle menu"
+            :aria-label="$t('landing.nav.toggleAria')"
             :aria-expanded="isMobileMenuOpen"
             :icon="isMobileMenuOpen ? 'pi pi-times' : 'pi pi-bars'"
           />
@@ -129,25 +131,25 @@ const toggleMobileMenu = () => {
               href="#rider"
               @click="toggleMobileMenu"
               class="block text-gray-300 hover:text-white transition-colors"
-              >Ride</a
+              >{{ $t('landing.nav.ride') }}</a
             >
             <a
               href="#driver"
               @click="toggleMobileMenu"
               class="block text-gray-300 hover:text-white transition-colors"
-              >Drive</a
+              >{{ $t('landing.nav.drive') }}</a
             >
             <a
               href="#features"
               @click="toggleMobileMenu"
               class="block text-gray-300 hover:text-white transition-colors"
-              >Features</a
+              >{{ $t('landing.nav.features') }}</a
             >
             <a
               href="#support"
               @click="toggleMobileMenu"
               class="block text-gray-300 hover:text-white transition-colors"
-              >Support</a
+              >{{ $t('landing.nav.support') }}</a
             >
             <RouterLink
               to="/login"
@@ -177,35 +179,34 @@ const toggleMobileMenu = () => {
         <div class="container mx-auto px-6 py-24 relative z-10">
           <div class="flex flex-col lg:flex-row items-center">
             <div class="lg:w-1/2 space-y-6">
-              <span class="uppercase text-emerald-400 tracking-[0.3em] text-xs"
-                >On-demand mobility</span
-              >
+              <span class="uppercase text-emerald-400 tracking-[0.3em] text-xs">{{
+                $t('landing.hero.label')
+              }}</span>
               <h1 class="text-4xl md:text-6xl font-black leading-tight">
-                Move like Medellín moves
+                {{ $t('landing.hero.title') }}
               </h1>
               <p class="text-gray-300 text-lg md:text-xl max-w-xl">
-                Tap a button, get a ride. Seamless pickups, transparent fares, and real-time
-                tracking keep you in control from curb to destination.
+                {{ $t('landing.hero.description') }}
               </p>
               <div class="flex flex-col sm:flex-row gap-4 sm:items-center">
                 <RouterLink
                   to="/signup"
                   class="bg-emerald-500 text-gray-900 font-semibold text-sm uppercase tracking-wide px-8 py-3 rounded-lg hover:bg-emerald-400 transition"
                 >
-                  Get Started
+                  {{ $t('landing.hero.cta.primary') }}
                 </RouterLink>
                 <a
                   href="#driver"
                   class="text-sm uppercase tracking-wide px-8 py-3 rounded-lg border border-gray-700 hover:border-gray-500 transition"
                 >
-                  Become a driver
+                  {{ $t('landing.hero.cta.secondary') }}
                 </a>
               </div>
               <div class="grid grid-cols-3 gap-6 pt-8">
-                <div v-for="metric in stats" :key="metric.label">
+                <div v-for="metric in stats" :key="metric.labelKey">
                   <div class="text-3xl font-bold text-white">{{ metric.value }}</div>
                   <div class="text-gray-400 text-xs uppercase tracking-wide">
-                    {{ metric.label }}
+                    {{ $t(metric.labelKey) }}
                   </div>
                 </div>
               </div>
@@ -216,7 +217,7 @@ const toggleMobileMenu = () => {
                   class="absolute -top-6 -left-6 w-40 h-40 bg-emerald-500/20 rounded-full blur-3xl"
                 ></div>
                 <img
-                  alt="Rider using the app"
+                  :alt="$t('landing.hero.imageAlt')"
                   class="rounded-3xl border border-gray-800 shadow-[0_30px_80px_-40px_rgba(16,185,129,0.7)]"
                   src="https://images.unsplash.com/photo-1617813489478-77657097c5d0?auto=format&fit=crop&w=450&q=80"
                 />
@@ -231,23 +232,20 @@ const toggleMobileMenu = () => {
         <div class="container mx-auto px-6">
           <div class="flex flex-col md:flex-row md:items-end md:justify-between mb-16">
             <div>
-              <h2 class="text-3xl md:text-4xl font-bold">Built for the way you move</h2>
-              <p class="text-gray-400 mt-4 max-w-xl">
-                From quick airport runs to late-night rides home, our platform adapts to every trip
-                with premium safety and comfort features.
-              </p>
+              <h2 class="text-3xl md:text-4xl font-bold">{{ $t('landing.features.title') }}</h2>
+              <p class="text-gray-400 mt-4 max-w-xl">{{ $t('landing.features.subtitle') }}</p>
             </div>
             <RouterLink
               to="/about"
               class="text-emerald-400 hover:text-emerald-300 font-semibold mt-8 md:mt-0"
             >
-              Learn more about us →
+              {{ $t('landing.features.link') }}
             </RouterLink>
           </div>
           <div class="grid gap-10 md:grid-cols-3">
             <article
               v-for="feature in features"
-              :key="feature.title"
+              :key="feature.titleKey"
               class="p-8 bg-gradient-to-br from-gray-900/80 to-gray-900/40 border border-gray-800 rounded-3xl backdrop-blur"
             >
               <div
@@ -255,8 +253,8 @@ const toggleMobileMenu = () => {
               >
                 <i :class="feature.icon"></i>
               </div>
-              <h3 class="text-xl font-semibold text-white mb-3">{{ feature.title }}</h3>
-              <p class="text-gray-400">{{ feature.description }}</p>
+              <h3 class="text-xl font-semibold text-white mb-3">{{ $t(feature.titleKey) }}</h3>
+              <p class="text-gray-400">{{ $t(feature.descriptionKey) }}</p>
             </article>
           </div>
         </div>
@@ -266,24 +264,23 @@ const toggleMobileMenu = () => {
       <section id="how-it-works" class="py-24 bg-gray-900">
         <div class="container mx-auto px-6">
           <div class="mb-16 max-w-2xl">
-            <span class="uppercase text-emerald-400 tracking-[0.3em] text-xs">Simple process</span>
-            <h2 class="text-3xl md:text-4xl font-bold mt-4">3 steps and you’re on the move</h2>
-            <p class="text-gray-400 mt-4">
-              Swift onboarding for riders and drivers. Manage trips, payments, and preferences
-              directly in the app without leaving the flow.
-            </p>
+            <span class="uppercase text-emerald-400 tracking-[0.3em] text-xs">{{
+              $t('landing.steps.tag')
+            }}</span>
+            <h2 class="text-3xl md:text-4xl font-bold mt-4">{{ $t('landing.steps.title') }}</h2>
+            <p class="text-gray-400 mt-4">{{ $t('landing.steps.description') }}</p>
           </div>
           <div class="grid gap-10 md:grid-cols-3">
             <div
               v-for="step in steps"
-              :key="step.title"
+              :key="step.titleKey"
               class="p-8 rounded-3xl border border-gray-800 bg-gray-900/60"
             >
               <div class="text-emerald-500 text-sm font-semibold uppercase tracking-[0.3em]">
                 {{ step.number }}
               </div>
-              <h3 class="text-xl font-semibold text-white mt-6">{{ step.title }}</h3>
-              <p class="text-gray-400 mt-4">{{ step.description }}</p>
+              <h3 class="text-xl font-semibold text-white mt-6">{{ $t(step.titleKey) }}</h3>
+              <p class="text-gray-400 mt-4">{{ $t(step.descriptionKey) }}</p>
             </div>
           </div>
         </div>
@@ -296,30 +293,33 @@ const toggleMobileMenu = () => {
       >
         <div class="container mx-auto px-6 flex flex-col lg:flex-row items-center gap-16">
           <div class="lg:w-1/2 space-y-6">
-            <span class="uppercase tracking-[0.3em] text-xs">Drive with {{ $t('app.name') }}</span>
-            <h2 class="text-3xl md:text-5xl font-black leading-tight">Earn on your schedule</h2>
+            <span class="uppercase tracking-[0.3em] text-xs"
+              >{{ $t('landing.driver.tag') }} {{ $t('app.name') }}</span
+            >
+            <h2 class="text-3xl md:text-5xl font-black leading-tight">
+              {{ $t('landing.driver.title') }}
+            </h2>
             <p class="text-gray-800 text-lg">
-              Flexible hours, weekly payouts, and dedicated driver support mean every shift fits
-              your lifestyle.
+              {{ $t('landing.driver.description') }}
             </p>
             <div class="flex flex-col sm:flex-row gap-4">
               <RouterLink
-                to="/driver-signup"
+                to="/signup"
                 class="px-8 py-3 bg-gray-900 text-white rounded-lg font-semibold uppercase tracking-wide text-sm hover:bg-black transition"
               >
-                Start driving
+                {{ $t('landing.driver.cta.primary') }}
               </RouterLink>
               <RouterLink
                 to="/faq"
                 class="px-8 py-3 border border-gray-900 text-gray-900 rounded-lg font-semibold uppercase tracking-wide text-sm hover:bg-gray-900 hover:text-white transition"
               >
-                Driver FAQ
+                {{ $t('landing.driver.cta.secondary') }}
               </RouterLink>
             </div>
           </div>
           <div class="lg:w-1/2">
             <img
-              alt="Driver smiling in car"
+              :alt="$t('landing.driver.imageAlt')"
               class="rounded-3xl shadow-[0_40px_100px_-40px_rgba(17,94,89,0.8)]"
               src="https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=700&q=80"
             />
@@ -331,25 +331,24 @@ const toggleMobileMenu = () => {
       <section class="py-24 bg-gray-900" id="support">
         <div class="container mx-auto px-6">
           <div class="max-w-2xl mb-16">
-            <span class="uppercase text-emerald-400 tracking-[0.3em] text-xs"
-              >Community voices</span
-            >
-            <h2 class="text-3xl md:text-4xl font-bold mt-4">Experiences that keep people moving</h2>
-            <p class="text-gray-400 mt-4">
-              Riders and drivers trust us for dependable transportation and a community-first
-              approach.
-            </p>
+            <span class="uppercase text-emerald-400 tracking-[0.3em] text-xs">{{
+              $t('landing.testimonials.tag')
+            }}</span>
+            <h2 class="text-3xl md:text-4xl font-bold mt-4">
+              {{ $t('landing.testimonials.title') }}
+            </h2>
+            <p class="text-gray-400 mt-4">{{ $t('landing.testimonials.description') }}</p>
           </div>
           <div class="grid gap-10 md:grid-cols-2">
             <figure
               v-for="testimonial in testimonials"
-              :key="testimonial.name"
+              :key="testimonial.quoteKey"
               class="p-10 rounded-3xl border border-gray-800 bg-gray-900/60"
             >
-              <p class="text-lg text-gray-200">{{ testimonial.quote }}</p>
+              <p class="text-lg text-gray-200">{{ $t(testimonial.quoteKey) }}</p>
               <figcaption class="mt-6 text-sm text-gray-400">
                 <span class="text-white font-semibold">{{ testimonial.name }}</span> —
-                {{ testimonial.role }}
+                {{ $t(testimonial.roleKey) }}
               </figcaption>
             </figure>
           </div>
@@ -357,12 +356,11 @@ const toggleMobileMenu = () => {
       </section>
 
       <!-- Footer CTA -->
-      <section class="py-20 bg-black">
+      <!-- <section class="py-20 bg-black">
         <div class="container mx-auto px-6 text-center space-y-6">
-          <h2 class="text-3xl md:text-4xl font-bold text-white">Download the app and get moving</h2>
+          <h2 class="text-3xl md:text-4xl font-bold text-white">{{ $t('landing.footercta.title') }}</h2>
           <p class="text-gray-400 max-w-2xl mx-auto">
-            Available on iOS and Android. Create an account, add your payment method, and book your
-            first ride in less than two minutes.
+            {{ $t('landing.footercta.description') }}
           </p>
           <div class="flex flex-col sm:flex-row justify-center gap-4">
             <a
@@ -371,8 +369,8 @@ const toggleMobileMenu = () => {
             >
               <i class="fab fa-apple text-2xl"></i>
               <div class="text-left text-sm leading-tight">
-                <div class="text-xs text-gray-600 uppercase">Download on the</div>
-                <div class="text-base font-bold text-gray-900">App Store</div>
+                <div class="text-xs text-gray-600 uppercase">{{ $t('landing.footercta.ios.caption') }}</div>
+                <div class="text-base font-bold text-gray-900">{{ $t('landing.footercta.ios.title') }}</div>
               </div>
             </a>
             <a
@@ -381,13 +379,13 @@ const toggleMobileMenu = () => {
             >
               <i class="fab fa-google-play text-2xl"></i>
               <div class="text-left text-sm leading-tight">
-                <div class="text-xs text-gray-400 uppercase">Get it on</div>
-                <div class="text-base font-bold text-white">Google Play</div>
+                <div class="text-xs text-gray-400 uppercase">{{ $t('landing.footercta.android.caption') }}</div>
+                <div class="text-base font-bold text-white">{{ $t('landing.footercta.android.title') }}</div>
               </div>
             </a>
           </div>
         </div>
-      </section>
+      </section> -->
     </main>
   </div>
 </template>

@@ -42,31 +42,31 @@ const toggleMobileMenu = () => {
           href="#features"
           @click="toggleMobileMenu"
           class="block py-3 px-6 text-gray-600 hover:bg-gray-50"
-          >Features</a
+          >{{ $t('homepage.menu.features') }}</a
         >
         <a
           href="#how-it-works"
           @click="toggleMobileMenu"
           class="block py-3 px-6 text-gray-600 hover:bg-gray-50"
-          >How It Works</a
+          >{{ $t('homepage.menu.howItWorks') }}</a
         >
         <RouterLink
           to="/about"
           @click="toggleMobileMenu"
           class="block py-3 px-6 text-gray-600 hover:bg-gray-50"
-          >About</RouterLink
+          >{{ $t('homepage.menu.about') }}</RouterLink
         >
         <RouterLink
           to="/login"
           @click="toggleMobileMenu"
           class="block py-3 px-6 text-gray-600 hover:bg-gray-50"
-          >Login</RouterLink
+          >{{ $t('login') }}</RouterLink
         >
         <RouterLink
           to="/signup"
           @click="toggleMobileMenu"
           class="block py-3 px-6 bg-blue-50 text-blue-600 font-semibold"
-          >Sign Up</RouterLink
+          >{{ $t('signup') }}</RouterLink
         >
       </div>
     </header>
@@ -102,8 +102,8 @@ const toggleMobileMenu = () => {
           </div>
           <div class="md:w-1/2 flex justify-center">
             <img
-              src="https://placehold.co/300x600/1f2937/FFFFFF?text=App+Screenshot"
-              alt="App Screenshot"
+              :src="`https://placehold.co/300x600/1f2937/FFFFFF?text=${encodeURIComponent($t('homepage.hero.imagePlaceholder'))}`"
+              :alt="$t('homepage.hero.imageAlt')"
               class="rounded-3xl shadow-2xl border-4 border-gray-700 w-2/3 md:w-auto"
             />
           </div>
@@ -113,10 +113,8 @@ const toggleMobileMenu = () => {
       <!-- Features Section -->
       <section id="features" class="py-20 bg-white">
         <div class="container mx-auto px-6 text-center">
-          <h2 class="text-3xl font-bold mb-3">Why Ride with SwiftRide?</h2>
-          <p class="text-gray-600 mb-12 max-w-2xl mx-auto">
-            We're focused on providing the best experience for riders and drivers in Medellín.
-          </p>
+          <h2 class="text-3xl font-bold mb-3">{{ $t('homepage.features.title') }}</h2>
+          <p class="text-gray-600 mb-12 max-w-2xl mx-auto">{{ $t('homepage.features.subtitle') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
             <!-- Feature 1 -->
             <div
@@ -127,11 +125,8 @@ const toggleMobileMenu = () => {
               >
                 <i class="fa-solid fa-shield-halved"></i>
               </div>
-              <h3 class="text-xl font-semibold mb-2">Safety First</h3>
-              <p class="text-gray-600">
-                Real-time trip tracking, verified drivers, and 24/7 support ensure your peace of
-                mind on every journey.
-              </p>
+              <h3 class="text-xl font-semibold mb-2">{{ $t('homepage.features.safety.title') }}</h3>
+              <p class="text-gray-600">{{ $t('homepage.features.safety.description') }}</p>
             </div>
             <!-- Feature 2 -->
             <div
@@ -142,11 +137,8 @@ const toggleMobileMenu = () => {
               >
                 <i class="fa-solid fa-hand-holding-dollar"></i>
               </div>
-              <h3 class="text-xl font-semibold mb-2">Transparent Pricing</h3>
-              <p class="text-gray-600">
-                Know your fare before you book. No hidden fees, no surprises. Just fair, upfront
-                pricing.
-              </p>
+              <h3 class="text-xl font-semibold mb-2">{{ $t('homepage.features.pricing.title') }}</h3>
+              <p class="text-gray-600">{{ $t('homepage.features.pricing.description') }}</p>
             </div>
             <!-- Feature 3 -->
             <div
@@ -157,11 +149,8 @@ const toggleMobileMenu = () => {
               >
                 <i class="fa-solid fa-map-location-dot"></i>
               </div>
-              <h3 class="text-xl font-semibold mb-2">Local Focus</h3>
-              <p class="text-gray-600">
-                Our service is optimized for Medellín, ensuring faster pickups and drivers who know
-                the city inside and out.
-              </p>
+              <h3 class="text-xl font-semibold mb-2">{{ $t('homepage.features.local.title') }}</h3>
+              <p class="text-gray-600">{{ $t('homepage.features.local.description') }}</p>
             </div>
           </div>
         </div>
@@ -170,12 +159,12 @@ const toggleMobileMenu = () => {
       <!-- How It Works Section -->
       <section id="how-it-works" class="py-20 bg-gray-50">
         <div class="container mx-auto px-6">
-          <h2 class="text-3xl font-bold text-center mb-12">Get a Ride in 3 Easy Steps</h2>
+          <h2 class="text-3xl font-bold text-center mb-12">{{ $t('homepage.steps.title') }}</h2>
           <div class="flex flex-col md:flex-row items-center justify-between">
             <div class="md:w-1/2 mb-10 md:mb-0">
               <img
-                src="https://placehold.co/600x400/e5e7eb/374151?text=Map+Illustration"
-                alt="Map Illustration"
+                :src="`https://placehold.co/600x400/e5e7eb/374151?text=${encodeURIComponent($t('homepage.steps.imagePlaceholder'))}`"
+                :alt="$t('homepage.steps.imageAlt')"
                 class="rounded-xl shadow-lg"
               />
             </div>
@@ -187,11 +176,8 @@ const toggleMobileMenu = () => {
                   1
                 </div>
                 <div>
-                  <h3 class="text-xl font-semibold mb-1">Request</h3>
-                  <p class="text-gray-600">
-                    Open the app and enter your destination. See your route and fare estimate
-                    upfront.
-                  </p>
+                  <h3 class="text-xl font-semibold mb-1">{{ $t('homepage.steps.request.title') }}</h3>
+                  <p class="text-gray-600">{{ $t('homepage.steps.request.description') }}</p>
                 </div>
               </div>
               <div class="flex items-start mb-8">
@@ -201,11 +187,8 @@ const toggleMobileMenu = () => {
                   2
                 </div>
                 <div>
-                  <h3 class="text-xl font-semibold mb-1">Ride</h3>
-                  <p class="text-gray-600">
-                    A nearby driver accepts your request. Track their arrival in real-time on the
-                    map.
-                  </p>
+                  <h3 class="text-xl font-semibold mb-1">{{ $t('homepage.steps.ride.title') }}</h3>
+                  <p class="text-gray-600">{{ $t('homepage.steps.ride.description') }}</p>
                 </div>
               </div>
               <div class="flex items-start">
@@ -215,11 +198,8 @@ const toggleMobileMenu = () => {
                   3
                 </div>
                 <div>
-                  <h3 class="text-xl font-semibold mb-1">Arrive</h3>
-                  <p class="text-gray-600">
-                    Enjoy a safe and comfortable ride to your destination. Payment is handled
-                    seamlessly in the app.
-                  </p>
+                  <h3 class="text-xl font-semibold mb-1">{{ $t('homepage.steps.arrive.title') }}</h3>
+                  <p class="text-gray-600">{{ $t('homepage.steps.arrive.description') }}</p>
                 </div>
               </div>
             </div>
@@ -230,22 +210,22 @@ const toggleMobileMenu = () => {
       <!-- Call to Action Section -->
       <section id="download" class="bg-gray-100">
         <div class="container mx-auto px-6 py-20 text-center">
-          <h2 class="text-3xl font-bold mb-4">Ready to Ride?</h2>
+          <h2 class="text-3xl font-bold mb-4">{{ $t('homepage.download.title') }}</h2>
           <p class="text-gray-600 mb-8 max-w-xl mx-auto">
-            Download the SwiftRide app today and experience a new standard of travel in Medellín.
+            {{ $t('homepage.download.subtitle') }}
           </p>
           <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
             <a
               href="#"
               class="bg-gray-800 text-white font-bold py-4 px-8 rounded-lg flex items-center justify-center hover:bg-black transition"
             >
-              <i class="fab fa-apple mr-3 text-2xl"></i> Download for iOS
+              <i class="fab fa-apple mr-3 text-2xl"></i> {{ $t('homepage.download.ios') }}
             </a>
             <a
               href="#"
               class="bg-gray-800 text-white font-bold py-4 px-8 rounded-lg flex items-center justify-center hover:bg-black transition"
             >
-              <i class="fab fa-google-play mr-3 text-2xl"></i> Download for Android
+              <i class="fab fa-google-play mr-3 text-2xl"></i> {{ $t('homepage.download.android') }}
             </a>
           </div>
         </div>
@@ -257,25 +237,43 @@ const toggleMobileMenu = () => {
       <div class="container mx-auto px-6 py-12">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
           <div>
-            <h4 class="font-bold text-lg mb-4">SwiftRide</h4>
-            <a href="#" class="block text-gray-400 hover:text-white mb-2">About Us</a>
-            <a href="#" class="block text-gray-400 hover:text-white mb-2">Careers</a>
-            <a href="#" class="block text-gray-400 hover:text-white mb-2">Press</a>
+            <h4 class="font-bold text-lg mb-4">{{ $t('homepage.footer.company.title') }}</h4>
+            <a href="#" class="block text-gray-400 hover:text-white mb-2">{{
+              $t('homepage.footer.company.about')
+            }}</a>
+            <a href="#" class="block text-gray-400 hover:text-white mb-2">{{
+              $t('homepage.footer.company.careers')
+            }}</a>
+            <a href="#" class="block text-gray-400 hover:text-white mb-2">{{
+              $t('homepage.footer.company.press')
+            }}</a>
           </div>
           <div>
-            <h4 class="font-bold text-lg mb-4">Explore</h4>
-            <a href="#" class="block text-gray-400 hover:text-white mb-2">Ride</a>
-            <a href="#" class="block text-gray-400 hover:text-white mb-2">Drive</a>
-            <a href="#" class="block text-gray-400 hover:text-white mb-2">Cities</a>
+            <h4 class="font-bold text-lg mb-4">{{ $t('homepage.footer.explore.title') }}</h4>
+            <a href="#" class="block text-gray-400 hover:text-white mb-2">{{
+              $t('homepage.footer.explore.ride')
+            }}</a>
+            <a href="#" class="block text-gray-400 hover:text-white mb-2">{{
+              $t('homepage.footer.explore.drive')
+            }}</a>
+            <a href="#" class="block text-gray-400 hover:text-white mb-2">{{
+              $t('homepage.footer.explore.cities')
+            }}</a>
           </div>
           <div>
-            <h4 class="font-bold text-lg mb-4">Support</h4>
-            <a href="#" class="block text-gray-400 hover:text-white mb-2">Help Center</a>
-            <a href="#" class="block text-gray-400 hover:text-white mb-2">Contact Us</a>
-            <a href="#" class="block text-gray-400 hover:text-white mb-2">Safety</a>
+            <h4 class="font-bold text-lg mb-4">{{ $t('homepage.footer.support.title') }}</h4>
+            <a href="#" class="block text-gray-400 hover:text-white mb-2">{{
+              $t('homepage.footer.support.helpCenter')
+            }}</a>
+            <a href="#" class="block text-gray-400 hover:text-white mb-2">{{
+              $t('homepage.footer.support.contact')
+            }}</a>
+            <a href="#" class="block text-gray-400 hover:text-white mb-2">{{
+              $t('homepage.footer.support.safety')
+            }}</a>
           </div>
           <div>
-            <h4 class="font-bold text-lg mb-4">Connect</h4>
+            <h4 class="font-bold text-lg mb-4">{{ $t('homepage.footer.connect.title') }}</h4>
             <div class="flex space-x-4 text-2xl">
               <a href="#" class="text-gray-400 hover:text-white"><i class="fab fa-facebook"></i></a>
               <a href="#" class="text-gray-400 hover:text-white"><i class="fab fa-twitter"></i></a>
@@ -286,9 +284,11 @@ const toggleMobileMenu = () => {
           </div>
         </div>
         <div class="mt-12 border-t border-gray-800 pt-8 text-center text-gray-500">
-          <p>&copy; 2025 SwiftRide Technologies Inc. All rights reserved.</p>
+          <p>&copy; {{ $t('homepage.footer.copy') }}</p>
           <p class="mt-1">
-            Made with <i class="fa-solid fa-heart text-red-500"></i> in Medellín, Colombia.
+            {{ $t('homepage.footer.madeIn.start') }}
+            <i class="fa-solid fa-heart text-red-500"></i>
+            {{ $t('homepage.footer.madeIn.end') }}
           </p>
         </div>
       </div>

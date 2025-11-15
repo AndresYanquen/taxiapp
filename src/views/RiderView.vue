@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import L from 'leaflet'
-import axios from 'axios'
 import { io, Socket } from 'socket.io-client'
 import type { Map as LeafletMap, LatLng, Marker, Polyline } from 'leaflet'
 import { Capacitor } from '@capacitor/core'
@@ -11,6 +10,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { useRouter } from 'vue-router'
 import { Dialog } from '@capacitor/dialog'
 import SideMenu from '@/components/Rider/SideMenu.vue'
+import { useApi } from '@/composables/useApi'
 
 // --- API and Socket Configuration ---
 let socket: Socket
@@ -30,6 +30,7 @@ const showModal = ref(false)
 const modalTitle = ref('')
 const modalMessage = ref('')
 const router = useRouter()
+const api = useApi()
 
 // --- New State for Ride Request ---
 const pickupAddress = ref('Getting current location...')
@@ -225,9 +226,8 @@ const findDriverWithPolling = async (pickupLatLng) => {
 
   try {
     // Usamos la ruta existente que busca conductores cercanos
-    const response = await axios.get(
+    const response = await api.get(
       `${import.meta.env.VITE_BACKEND_URL}/api/drivers/nearby?lat=${pickupLatLng.lat}&lng=${pickupLatLng.lng}`,
-      { headers: { Authorization: `Bearer ${authStore.user.token}` } },
     )
 
     // Si encontramos conductores, procedemos a crear el viaje
@@ -500,11 +500,8 @@ const reverseGeocode = async (latlng: LatLng) => {
   pickupAddress.value = 'Buscando dirección...'
 
   try {
-    const response = await axios.get(
+    const response = await api.get(
       `${import.meta.env.VITE_BACKEND_URL}/api/location/reverse-geocode?lat=${latlng.lat}&lng=${latlng.lng}`,
-      {
-        headers: { Authorization: `Bearer ${authStore.user.token}` },
-      },
     )
 
     console.log('response reverse location', response)
@@ -521,9 +518,7 @@ const checkForActiveRide = async () => {
   if (!authStore.isAuthenticated) return
 
   try {
-    const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/trips/rider/active`, {
-      headers: { Authorization: `Bearer ${authStore.user.token}` },
-    })
+    const response = await api.get(`${import.meta.env.VITE_BACKEND_URL}/api/trips/rider/active`)
 
     const activeTrip = response.data
     if (activeTrip) {
@@ -579,17 +574,13 @@ const createTripRequest = async (pickupLatLng) => {
       coordinates: [0, 0], // Placeholder
     }
 
-    const res = await axios.post(
-      `${import.meta.env.VITE_BACKEND_URL}/api/trips/request`,
-      {
-        pickupLocation: pickupGeoJSON,
-        dropoffLocation: dropoffGeoJSON,
-        pickupName: pickupAddress.value,
-        destinationName: destinationAddress.value,
-        userIndications: userIndications.value,
-      },
-      { headers: { Authorization: `Bearer ${authStore.user.token}` } },
-    )
+    const res = await api.post(`${import.meta.env.VITE_BACKEND_URL}/api/trips/request`, {
+      pickupLocation: pickupGeoJSON,
+      dropoffLocation: dropoffGeoJSON,
+      pickupName: pickupAddress.value,
+      destinationName: destinationAddress.value,
+      userIndications: userIndications.value,
+    })
 
     rideId.value = res.data._id
     localStorage.setItem('rideId', rideId.value)
@@ -617,11 +608,7 @@ const cancelRide = async () => {
   if (value) {
     try {
       // 4. Se realiza la llamada a la API para cancelar el viaje en el backend
-      const response = await axios.post(
-        `${import.meta.env.VITE_BACKEND_URL}/api/trips/${rideId.value}/cancel`,
-        {},
-        { headers: { Authorization: `Bearer ${authStore.user.token}` } },
-      )
+      const response = await api.post(`${import.meta.env.VITE_BACKEND_URL}/api/trips/${rideId.value}/cancel`)
 
       // El listener del socket se encargará de actualizar la UI, por lo que no es
       // necesario llamar a updateUIFromState() aquí para evitar duplicidad.

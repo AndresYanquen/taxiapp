@@ -114,10 +114,11 @@ const handleSignup = async (values: any) => {
           <i class="fa-solid fa-car-side text-emerald-400 mr-3"></i>{{ $t('app.name') || 'SwiftRide' }}
         </RouterLink>
         <div class="space-y-4">
-          <h1 class="text-4xl font-black leading-tight">Create your SwiftRide account</h1>
+          <h1 class="text-4xl font-black leading-tight">
+            {{ $t('signup.hero.title', { app: $t('app.name') || 'SwiftRide' }) }}
+          </h1>
           <p class="text-gray-400 text-lg max-w-xl mx-auto lg:mx-0">
-            Join the SwiftRide community and unlock seamless transportation with real-time tracking,
-            trusted drivers, and a city-first experience designed for Medellín.
+            {{ $t('signup.hero.description', { app: $t('app.name') || 'SwiftRide' }) }}
           </p>
         </div>
         <div class="hidden lg:flex flex-col gap-5 text-sm text-gray-400">
@@ -125,21 +126,21 @@ const handleSignup = async (values: any) => {
             <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
               <i class="fa-solid fa-bolt"></i>
             </span>
-            Instant verification and onboarding for both riders and drivers
+            {{ $t('signup.hero.feature.instant') }}
           </div>
           <div class="flex items-center gap-4">
             <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
               <i class="fa-solid fa-star"></i>
             </span>
-            Keep your 5-star reputation with secure profiles and reviews
+            {{ $t('signup.hero.feature.rating') }}
           </div>
         </div>
       </div>
 
       <div class="bg-gray-900/60 border border-gray-800 rounded-3xl p-8 shadow-[0_25px_70px_-35px_rgba(16,185,129,0.45)] backdrop-blur">
         <div class="text-center space-y-2">
-          <h2 class="text-2xl font-bold text-white">Choose how you ride</h2>
-          <p class="text-sm text-gray-400">Tell us who you are and we'll tailor the experience.</p>
+          <h2 class="text-2xl font-bold text-white">{{ $t('signup.form.modeTitle') }}</h2>
+          <p class="text-sm text-gray-400">{{ $t('signup.form.modeSubtitle') }}</p>
         </div>
 
         <div class="mt-6 grid grid-cols-2 gap-3 rounded-2xl border border-gray-800 bg-gray-900/80 p-2">
@@ -153,7 +154,7 @@ const handleSignup = async (values: any) => {
                 : 'text-gray-400 hover:text-white'
             ]"
           >
-            I'm a Rider
+            {{ $t('signup.form.role.user') }}
           </button>
           <button
             @click="role = 'driver'"
@@ -165,7 +166,7 @@ const handleSignup = async (values: any) => {
                 : 'text-gray-400 hover:text-white'
             ]"
           >
-            I'm a Driver
+            {{ $t('signup.form.role.driver') }}
           </button>
         </div>
 
@@ -185,7 +186,9 @@ const handleSignup = async (values: any) => {
 
           <div class="space-y-5">
             <div>
-              <label for="first-name" class="sr-only">First name</label>
+              <label for="first-name" class="sr-only">{{
+                $t('signup.form.firstNameLabel')
+              }}</label>
               <Field
                 id="first-name"
                 name="firstName"
@@ -196,13 +199,15 @@ const handleSignup = async (values: any) => {
                     ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
                     : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
                 ]"
-                placeholder="First name"
+                :placeholder="$t('signup.form.firstNamePlaceholder')"
               />
               <ErrorMessage name="firstName" class="mt-1 text-xs text-red-300" />
             </div>
 
             <div>
-              <label for="last-name" class="sr-only">Last name</label>
+              <label for="last-name" class="sr-only">{{
+                $t('signup.form.lastNameLabel')
+              }}</label>
               <Field
                 id="last-name"
                 name="lastName"
@@ -213,13 +218,15 @@ const handleSignup = async (values: any) => {
                     ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
                     : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
                 ]"
-                placeholder="Last name"
+                :placeholder="$t('signup.form.lastNamePlaceholder')"
               />
               <ErrorMessage name="lastName" class="mt-1 text-xs text-red-300" />
             </div>
 
             <div>
-              <label for="phone-number" class="sr-only">Phone number</label>
+              <label for="phone-number" class="sr-only">{{
+                $t('signup.form.phoneLabel')
+              }}</label>
               <Field
                 id="phone-number"
                 name="phoneNumber"
@@ -230,14 +237,16 @@ const handleSignup = async (values: any) => {
                     ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
                     : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
                 ]"
-                placeholder="Phone number"
+                :placeholder="$t('signup.form.phonePlaceholder')"
               />
-              <p class="mt-1 text-xs text-gray-500">Te enviaremos un SMS para verificar tu identidad.</p>
+              <p class="mt-1 text-xs text-gray-500">{{ $t('signup.form.phoneHelper') }}</p>
               <ErrorMessage name="phoneNumber" class="mt-1 text-xs text-red-300" />
             </div>
 
             <div>
-              <label for="email-address" class="sr-only">Email address</label>
+              <label for="email-address" class="sr-only">{{
+                $t('signup.form.emailLabel')
+              }}</label>
               <Field
                 id="email-address"
                 name="email"
@@ -248,13 +257,15 @@ const handleSignup = async (values: any) => {
                     ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
                     : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
                 ]"
-                placeholder="Email address"
+                :placeholder="$t('signup.form.emailPlaceholder')"
               />
               <ErrorMessage name="email" class="mt-1 text-xs text-red-300" />
             </div>
 
             <div class="relative">
-              <label for="password" class="sr-only">Password</label>
+              <label for="password" class="sr-only">{{
+                $t('signup.form.passwordLabel')
+              }}</label>
               <Field
                 id="password"
                 name="password"
@@ -265,16 +276,16 @@ const handleSignup = async (values: any) => {
                     ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
                     : 'border-gray-800 focus:border-emerald-500 focus:ring-emerald-500/40'
                 ]"
-                placeholder="Password"
+                :placeholder="$t('signup.form.passwordPlaceholder')"
               />
               <button
                 type="button"
-                aria-label="Toggle password visibility"
+                :aria-label="$t('signup.form.passwordToggleAria')"
                 @click="togglePasswordVisibility"
                 class="absolute inset-y-0 right-0 flex items-center px-4 text-sm font-semibold text-gray-400 transition hover:text-white"
               >
-                <span v-if="isPasswordVisible">Hide</span>
-                <span v-else>Show</span>
+                <span v-if="isPasswordVisible">{{ $t('signup.form.passwordHide') }}</span>
+                <span v-else>{{ $t('signup.form.passwordShow') }}</span>
               </button>
               <ErrorMessage name="password" class="mt-1 text-xs text-red-300" />
             </div>
@@ -288,14 +299,14 @@ const handleSignup = async (values: any) => {
             <span v-if="isLoading" class="animate-spin text-gray-900">
               <i class="fa-solid fa-spinner"></i>
             </span>
-            {{ isLoading ? 'Creating Account...' : 'Create Account' }}
+            {{ isLoading ? $t('signup.loading') : $t('signup') }}
           </button>
         </Form>
 
         <p class="mt-8 text-center text-sm text-gray-400">
-          Already have an account?
+          {{ $t('signup.form.haveAccount') }}
           <RouterLink to="/login" class="font-semibold text-emerald-400 hover:text-emerald-300">
-            Sign in
+            {{ $t('login') }}
           </RouterLink>
         </p>
       </div>
